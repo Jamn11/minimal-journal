@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Journal</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Home Screen -->
+        <div id="home-screen" class="screen active">
+            <div class="home-header">
+                <input type="text" id="search-input" placeholder="Search entries..." class="search-bar">
+                <button id="filter-button" class="filter-button">Filter</button>
+            </div>
+            <div id="entries-list" class="entries-list">
+                <!-- Entry items will be populated here -->
+            </div>
+        </div>
+
+        <!-- Journal Screen -->
+        <div id="journal-screen" class="screen">
+            <div class="journal-header">
+                <input type="text" id="title-input" placeholder="Entry title..." class="title-input">
+                <button id="save-button" class="save-button">Save</button>
+            </div>
+            <textarea id="body-textarea" placeholder="Write your journal entry here..." class="body-textarea"></textarea>
+            <div class="word-counter">
+                <span id="word-count">0 words</span>
+            </div>
+        </div>
+
+        <!-- View Screen -->
+        <div id="view-screen" class="screen">
+            <div class="view-content">
+                <h1 id="view-title" class="view-title"></h1>
+                <div id="view-timestamp" class="view-timestamp"></div>
+                <div id="view-tags" class="view-tags"></div>
+                <div id="view-body" class="view-body"></div>
+            </div>
+            <button id="back-button" class="back-button">Back to Home</button>
+        </div>
+    </div>
+
+    <!-- Filter Modal -->
+    <div id="filter-modal" class="modal">
+        <div class="modal-content">
+            <h3>Filter Entries</h3>
+            <div class="filter-section">
+                <label>Tags:</label>
+                <input type="text" id="filter-tags" placeholder="Enter tags (comma separated)">
+            </div>
+            <div class="filter-section">
+                <label>Date From:</label>
+                <input type="date" id="filter-date-from">
+            </div>
+            <div class="filter-section">
+                <label>Date To:</label>
+                <input type="date" id="filter-date-to">
+            </div>
+            <div class="modal-buttons">
+                <button id="apply-filters">Apply</button>
+                <button id="clear-filters">Clear</button>
+                <button id="cancel-filters">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app-browser.js"></script>
+</body>
+</html>
