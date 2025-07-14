@@ -13,6 +13,7 @@
             <div class="home-header">
                 <input type="text" id="search-input" placeholder="Search entries..." class="search-bar">
                 <button id="filter-button" class="filter-button">Filter</button>
+                <button id="settings-button" class="settings-button" title="Settings">⚙️</button>
             </div>
             <div id="entries-list" class="entries-list">
                 <!-- Entry items will be populated here -->
@@ -63,6 +64,54 @@
                 <button id="apply-filters">Apply</button>
                 <button id="clear-filters">Clear</button>
                 <button id="cancel-filters">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content settings-modal-content">
+            <h3>Settings</h3>
+            
+            <div class="settings-section">
+                <label>Font Family:</label>
+                <select id="font-family-select">
+                    <option value="Courier New, Monaco, Menlo, monospace">Courier New (Default)</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="Times New Roman, serif">Times New Roman</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="Helvetica, sans-serif">Helvetica</option>
+                    <option value="SF Pro Text, -apple-system, system-ui">SF Pro Text</option>
+                    <option value="Consolas, Monaco, monospace">Consolas</option>
+                    <option value="Fira Code, monospace">Fira Code</option>
+                    <option value="Comic Sans MS, cursive">Comic Sans MS</option>
+                </select>
+            </div>
+
+            <div class="settings-section">
+                <label>Font Size:</label>
+                <div class="font-size-controls">
+                    <input type="range" id="font-size-slider" min="12" max="24" value="16" step="1">
+                    <span id="font-size-value">16px</span>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <label>Theme:</label>
+                <div class="theme-controls">
+                    <button id="light-theme" class="theme-option">☀️ Light</button>
+                    <button id="dark-theme" class="theme-option active">🌙 Dark</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <label>Export:</label>
+                <button id="export-button" class="export-button">Export All Entries</button>
+            </div>
+
+            <div class="modal-buttons">
+                <button id="save-settings">Save</button>
+                <button id="cancel-settings">Cancel</button>
             </div>
         </div>
     </div>

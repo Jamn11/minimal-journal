@@ -1,0 +1,9 @@
+- Big settings menu with lots of options
+    - Font
+    - Font size
+    - Themes
+    - Password protection
+- Password (thumbprint?) protection
+- Edit already created posts
+- Fix icon (so it doesn't have the white backgroud)
+- The ability to export all entries from the app in md format in a folder

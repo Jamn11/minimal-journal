@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { DatabaseManager } from './database';
 import { JournalEntry, SearchFilters } from '../shared/types';
 
@@ -57,32 +58,103 @@ class JournalApp {
     ipcMain.handle('app:get-platform', () => {
       return process.platform;
     });
+
+    ipcMain.handle('app:export-entries', async () => {
+      return await this.exportEntries();
+    });
   }
 
   setupKeyboardShortcuts(): void {
-    globalShortcut.register('CommandOrControl+N', () => {
-      this.mainWindow?.webContents.send('shortcut:new-entry');
-    });
+    this.mainWindow?.webContents.on('before-input-event', (event, input) => {
+      // Only handle shortcuts when window is focused and visible
+      if (!this.mainWindow?.isFocused() || !this.mainWindow?.isVisible()) {
+        return;
+      }
 
-    globalShortcut.register('CommandOrControl+F', () => {
-      this.mainWindow?.webContents.send('shortcut:focus-search');
-    });
+      const { control, meta, key, type } = input;
+      const cmdOrCtrl = process.platform === 'darwin' ? meta : control;
 
-    globalShortcut.register('CommandOrControl+S', () => {
-      this.mainWindow?.webContents.send('shortcut:save-entry');
+      if (type === 'keyDown') {
+        if (cmdOrCtrl && key.toLowerCase() === 'n') {
+          event.preventDefault();
+          this.mainWindow?.webContents.send('shortcut:new-entry');
+        } else if (cmdOrCtrl && key.toLowerCase() === 'f') {
+          event.preventDefault();
+          this.mainWindow?.webContents.send('shortcut:focus-search');
+        } else if (cmdOrCtrl && key.toLowerCase() === 's') {
+          event.preventDefault();
+          this.mainWindow?.webContents.send('shortcut:save-entry');
+        } else if (key === 'Escape') {
+          event.preventDefault();
+          this.mainWindow?.webContents.send('shortcut:escape');
+        } else if (cmdOrCtrl && key.toLowerCase() === 'd') {
+          event.preventDefault();
+          this.mainWindow?.webContents.send('shortcut:delete-entry');
+        } else if (cmdOrCtrl && key.toLowerCase() === 'm') {
+          event.preventDefault();
+          this.mainWindow?.webContents.send('shortcut:toggle-theme');
+        } else if (cmdOrCtrl && key.toLowerCase() === 'e') {
+          event.preventDefault();
+          this.mainWindow?.webContents.send('shortcut:edit-entry');
+        }
+        // Note: CMD+B and CMD+I are handled in the renderer for journal screen only
+      }
     });
+  }
 
-    globalShortcut.register('Escape', () => {
-      this.mainWindow?.webContents.send('shortcut:escape');
-    });
+  private async exportEntries(): Promise<{ success: boolean; path?: string; error?: string }> {
+    try {
+      const result = await dialog.showSaveDialog(this.mainWindow!, {
+        title: 'Export Journal Entries',
+        defaultPath: 'journal-entries.md',
+        filters: [
+          { name: 'Markdown Files', extensions: ['md'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
 
-    globalShortcut.register('CommandOrControl+D', () => {
-      this.mainWindow?.webContents.send('shortcut:delete-entry');
-    });
+      if (result.canceled) {
+        return { success: false };
+      }
 
-    globalShortcut.register('CommandOrControl+M', () => {
-      this.mainWindow?.webContents.send('shortcut:toggle-theme');
-    });
+      const entries = await this.db.getAllEntries();
+      const markdown = this.generateMarkdownFromEntries(entries);
+
+      await fs.promises.writeFile(result.filePath!, markdown, 'utf8');
+      
+      return { success: true, path: result.filePath };
+    } catch (error) {
+      console.error('Export failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private generateMarkdownFromEntries(entries: JournalEntry[]): string {
+    const sortedEntries = entries
+      .filter(entry => !entry.draft)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    let markdown = '# Journal Entries\n\n';
+    markdown += `Exported on ${new Date().toLocaleDateString()}\n\n`;
+    markdown += '---\n\n';
+
+    for (const entry of sortedEntries) {
+      const date = new Date(entry.timestamp);
+      const formattedDate = date.toLocaleDateString();
+      const formattedTime = date.toLocaleTimeString();
+
+      markdown += `## ${entry.title || 'Untitled'}\n\n`;
+      markdown += `**Date:** ${formattedDate} ${formattedTime}\n\n`;
+      
+      if (entry.tags.length > 0) {
+        markdown += `**Tags:** ${entry.tags.map(tag => `#${tag}`).join(', ')}\n\n`;
+      }
+
+      markdown += `${entry.body}\n\n`;
+      markdown += '---\n\n';
+    }
+
+    return markdown;
   }
 
   async initialize(): Promise<void> {
@@ -90,12 +162,13 @@ class JournalApp {
     await this.db.initialize();
     
     this.setupIpcHandlers();
-    this.setupKeyboardShortcuts();
     await this.createWindow();
+    this.setupKeyboardShortcuts();
 
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         await this.createWindow();
+        this.setupKeyboardShortcuts();
       }
     });
 
@@ -106,7 +179,6 @@ class JournalApp {
     });
 
     app.on('will-quit', () => {
-      globalShortcut.unregisterAll();
       this.db.close();
     });
   }

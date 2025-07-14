@@ -21,6 +21,8 @@ class JournalApp {
       viewScreen: document.getElementById('view-screen'),
       searchInput: document.getElementById('search-input'),
       filterButton: document.getElementById('filter-button'),
+      exportButton: document.getElementById('export-button'),
+      settingsButton: document.getElementById('settings-button'),
       entriesList: document.getElementById('entries-list'),
       titleInput: document.getElementById('title-input'),
       bodyTextarea: document.getElementById('body-textarea'),
@@ -38,6 +40,14 @@ class JournalApp {
       applyFilters: document.getElementById('apply-filters'),
       clearFilters: document.getElementById('clear-filters'),
       cancelFilters: document.getElementById('cancel-filters'),
+      settingsModal: document.getElementById('settings-modal'),
+      fontFamilySelect: document.getElementById('font-family-select'),
+      fontSizeSlider: document.getElementById('font-size-slider'),
+      fontSizeValue: document.getElementById('font-size-value'),
+      lightTheme: document.getElementById('light-theme'),
+      darkTheme: document.getElementById('dark-theme'),
+      saveSettings: document.getElementById('save-settings'),
+      cancelSettings: document.getElementById('cancel-settings'),
     };
   }
 
@@ -53,7 +63,7 @@ class JournalApp {
 
     this.setupEventListeners();
     this.setupKeyboardShortcuts();
-    this.initializeTheme();
+    this.initializeSettings();
     await this.loadEntries();
     this.showScreen('home');
     
@@ -67,6 +77,8 @@ class JournalApp {
   setupEventListeners() {
     this.elements.searchInput.addEventListener('input', () => this.handleSearch());
     this.elements.filterButton.addEventListener('click', () => this.showFilterModal());
+    this.elements.exportButton.addEventListener('click', () => this.exportEntries());
+    this.elements.settingsButton.addEventListener('click', () => this.showSettingsModal());
     this.elements.saveButton.addEventListener('click', () => this.saveEntry());
     this.elements.bodyTextarea.addEventListener('input', () => this.updateWordCount());
     this.elements.backButton.addEventListener('click', () => this.showScreen('home'));
@@ -75,9 +87,21 @@ class JournalApp {
     this.elements.clearFilters.addEventListener('click', () => this.clearFilters());
     this.elements.cancelFilters.addEventListener('click', () => this.hideFilterModal());
 
+    this.elements.saveSettings.addEventListener('click', () => this.saveSettings());
+    this.elements.cancelSettings.addEventListener('click', () => this.hideSettingsModal());
+    this.elements.fontSizeSlider.addEventListener('input', () => this.updateFontSizeDisplay());
+    this.elements.lightTheme.addEventListener('click', () => this.selectTheme('light'));
+    this.elements.darkTheme.addEventListener('click', () => this.selectTheme('dark'));
+
     this.elements.filterModal.addEventListener('click', (e) => {
       if (e.target === this.elements.filterModal) {
         this.hideFilterModal();
+      }
+    });
+
+    this.elements.settingsModal.addEventListener('click', (e) => {
+      if (e.target === this.elements.settingsModal) {
+        this.hideSettingsModal();
       }
     });
   }
@@ -101,12 +125,14 @@ class JournalApp {
           }
           break;
         case 'escape':
-          if (this.appState.currentScreen === 'journal') {
+          if (this.elements.settingsModal.classList.contains('active')) {
+            this.hideSettingsModal();
+          } else if (this.elements.filterModal.classList.contains('active')) {
+            this.hideFilterModal();
+          } else if (this.appState.currentScreen === 'journal') {
             this.saveAsDraft();
           } else if (this.appState.currentScreen === 'view') {
             this.showScreen('home');
-          } else if (this.elements.filterModal.classList.contains('active')) {
-            this.hideFilterModal();
           }
           break;
         case 'delete-entry':
@@ -117,12 +143,44 @@ class JournalApp {
         case 'toggle-theme':
           this.toggleTheme();
           break;
+        case 'edit-entry':
+          if (this.appState.currentScreen === 'view') {
+            this.editCurrentEntry();
+          }
+          break;
       }
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.elements.filterModal.classList.contains('active')) {
-        this.hideFilterModal();
+      // Settings shortcut from home screen (CMD+,)
+      if (this.appState.currentScreen === 'home' && (e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        this.showSettingsModal();
+        return;
+      }
+      
+      // Save settings with Enter key when in settings modal
+      if (this.elements.settingsModal.classList.contains('active') && e.key === 'Enter') {
+        e.preventDefault();
+        this.saveSettings();
+        return;
+      }
+      
+      // Format shortcuts in journal screen
+      if (this.appState.currentScreen === 'journal') {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+          e.preventDefault();
+          this.applyFormat('bold');
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+          e.preventDefault();
+          this.applyFormat('italic');
+        }
+      }
+      
+      // Edit shortcut in view screen
+      if (this.appState.currentScreen === 'view' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        this.editCurrentEntry();
       }
     });
   }
@@ -297,6 +355,12 @@ class JournalApp {
     this.elements.titleInput.focus();
   }
 
+  editCurrentEntry() {
+    if (this.appState.currentEntry) {
+      this.editEntry(this.appState.currentEntry);
+    }
+  }
+
   viewEntry(entry) {
     this.appState.currentEntry = entry;
     this.elements.viewTitle.textContent = entry.title || 'Untitled';
@@ -307,7 +371,7 @@ class JournalApp {
     const tags = entry.tags.map(tag => `<span class="tag">#${tag}</span>`).join('');
     this.elements.viewTags.innerHTML = tags;
     
-    this.elements.viewBody.textContent = entry.body;
+    this.elements.viewBody.innerHTML = this.renderMarkdown(entry.body);
     
     this.showScreen('view');
   }
@@ -417,9 +481,168 @@ class JournalApp {
       this.showError('Failed to delete entry. Please try again.');
     }
   }
+
+  applyFormat(format) {
+    const textarea = this.elements.bodyTextarea;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    
+    let formattedText = '';
+    const marker = format === 'bold' ? '**' : '*';
+    
+    if (selectedText) {
+      // If text is selected, wrap it with formatting
+      formattedText = `${marker}${selectedText}${marker}`;
+    } else {
+      // If no text selected, insert markers with cursor in between
+      formattedText = `${marker}${marker}`;
+    }
+    
+    // Replace the selected text with formatted text
+    const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+    textarea.value = newValue;
+    
+    // Position cursor correctly
+    if (selectedText) {
+      textarea.setSelectionRange(start + marker.length, start + marker.length + selectedText.length);
+    } else {
+      textarea.setSelectionRange(start + marker.length, start + marker.length);
+    }
+    
+    textarea.focus();
+    this.updateWordCount();
+  }
+
+  renderMarkdown(text) {
+    // Simple markdown renderer for bold and italic
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/\n/g, '<br>');
+  }
+
+  async exportEntries() {
+    try {
+      const result = await window.electronAPI.exportEntries();
+      
+      if (result.success) {
+        console.log('Entries exported successfully to:', result.path);
+        // Could add a toast notification here
+      } else if (result.error) {
+        console.error('Export failed:', result.error);
+        // Could add error notification here
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  }
+
+  // Public methods for testing
+  testBold() {
+    this.applyFormat('bold');
+  }
+
+  testItalic() {
+    this.applyFormat('italic');
+  }
+
+  getScreenState() {
+    return this.appState.currentScreen;
+  }
+
+  // Settings methods
+  showSettingsModal() {
+    this.loadCurrentSettings();
+    this.elements.settingsModal.classList.add('active');
+  }
+
+  hideSettingsModal() {
+    this.elements.settingsModal.classList.remove('active');
+  }
+
+  loadCurrentSettings() {
+    // Load current font family
+    const currentFontFamily = localStorage.getItem('fontFamily') || 'Courier New, Monaco, Menlo, monospace';
+    this.elements.fontFamilySelect.value = currentFontFamily;
+
+    // Load current font size
+    const currentFontSize = localStorage.getItem('fontSize') || '16';
+    this.elements.fontSizeSlider.value = currentFontSize;
+    this.elements.fontSizeValue.textContent = currentFontSize + 'px';
+
+    // Load current theme
+    const currentTheme = localStorage.getItem('theme') || 'dark';
+    this.updateThemeButtons(currentTheme);
+  }
+
+  updateFontSizeDisplay() {
+    const size = this.elements.fontSizeSlider.value;
+    this.elements.fontSizeValue.textContent = size + 'px';
+    
+    // Apply the font size change immediately for live preview
+    document.documentElement.style.setProperty('--app-font-size', size + 'px');
+  }
+
+  selectTheme(theme) {
+    this.updateThemeButtons(theme);
+  }
+
+  updateThemeButtons(theme) {
+    this.elements.lightTheme.classList.remove('active');
+    this.elements.darkTheme.classList.remove('active');
+    
+    if (theme === 'light') {
+      this.elements.lightTheme.classList.add('active');
+    } else {
+      this.elements.darkTheme.classList.add('active');
+    }
+  }
+
+  saveSettings() {
+    const fontFamily = this.elements.fontFamilySelect.value;
+    const fontSize = this.elements.fontSizeSlider.value;
+    const theme = this.elements.lightTheme.classList.contains('active') ? 'light' : 'dark';
+
+    // Save to localStorage
+    localStorage.setItem('fontFamily', fontFamily);
+    localStorage.setItem('fontSize', fontSize);
+    localStorage.setItem('theme', theme);
+
+    // Apply settings immediately
+    this.applySettings(fontFamily, fontSize, theme);
+
+    this.hideSettingsModal();
+  }
+
+  applySettings(fontFamily, fontSize, theme) {
+    // Apply font family and size to the entire app
+    document.documentElement.style.setProperty('--app-font-family', fontFamily);
+    document.documentElement.style.setProperty('--app-font-size', fontSize + 'px');
+
+    // Apply theme
+    if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }
+
+  initializeSettings() {
+    const fontFamily = localStorage.getItem('fontFamily') || 'Courier New, Monaco, Menlo, monospace';
+    const fontSize = localStorage.getItem('fontSize') || '16';
+    const theme = localStorage.getItem('theme') || 'dark';
+    
+    this.applySettings(fontFamily, fontSize, theme);
+  }
 }
+
+let journalAppInstance;
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, starting JournalApp...');
-  new JournalApp();
+  journalAppInstance = new JournalApp();
+  
+  // Make it available for testing in browser console
+  window.testApp = journalAppInstance;
 });

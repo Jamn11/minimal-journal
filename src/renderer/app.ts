@@ -8,6 +8,7 @@ declare global {
       getAllEntries: (filters?: SearchFilters) => Promise<JournalEntry[]>;
       deleteEntry: (id: string) => Promise<void>;
       getPlatform: () => Promise<string>;
+      exportEntries: () => Promise<{ success: boolean; path?: string; error?: string }>;
       onShortcut: (callback: (shortcut: string) => void) => void;
       removeAllListeners: () => void;
     };
@@ -29,6 +30,7 @@ class JournalApp {
     viewScreen: HTMLElement;
     searchInput: HTMLInputElement;
     filterButton: HTMLElement;
+    exportButton: HTMLElement;
     entriesList: HTMLElement;
     titleInput: HTMLInputElement;
     bodyTextarea: HTMLTextAreaElement;
@@ -61,6 +63,7 @@ class JournalApp {
       viewScreen: document.getElementById('view-screen')!,
       searchInput: document.getElementById('search-input')! as HTMLInputElement,
       filterButton: document.getElementById('filter-button')!,
+      exportButton: document.getElementById('export-button')!,
       entriesList: document.getElementById('entries-list')!,
       titleInput: document.getElementById('title-input')! as HTMLInputElement,
       bodyTextarea: document.getElementById('body-textarea')! as HTMLTextAreaElement,
@@ -93,6 +96,7 @@ class JournalApp {
   private setupEventListeners(): void {
     this.elements.searchInput.addEventListener('input', () => this.handleSearch());
     this.elements.filterButton.addEventListener('click', () => this.showFilterModal());
+    this.elements.exportButton.addEventListener('click', () => this.exportEntries());
     this.elements.saveButton.addEventListener('click', () => this.saveEntry());
     this.elements.bodyTextarea.addEventListener('input', () => this.updateWordCount());
     this.elements.backButton.addEventListener('click', () => this.showScreen('home'));
@@ -134,17 +138,52 @@ class JournalApp {
             this.hideFilterModal();
           }
           break;
+        case 'edit-entry':
+          if (this.appState.currentScreen === 'view') {
+            this.editCurrentEntry();
+          }
+          break;
       }
     });
 
     document.addEventListener('keydown', (e) => {
+      console.log('🔍 Keydown event:', {
+        key: e.key,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        currentScreen: this.appState.currentScreen,
+        target: e.target
+      });
+
       if (e.key === 'Escape' && this.elements.filterModal.classList.contains('active')) {
         this.hideFilterModal();
+      }
+      
+      // Format shortcuts in journal screen
+      if (this.appState.currentScreen === 'journal') {
+        console.log('📝 In journal screen, checking for format shortcuts');
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+          console.log('🔥 CMD+B detected! Applying bold formatting');
+          e.preventDefault();
+          this.applyFormat('bold');
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+          console.log('🔥 CMD+I detected! Applying italic formatting');
+          e.preventDefault();
+          this.applyFormat('italic');
+        }
+      }
+      
+      // Edit shortcut in view screen
+      if (this.appState.currentScreen === 'view' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        this.editCurrentEntry();
       }
     });
   }
 
   private showScreen(screen: 'home' | 'journal' | 'view'): void {
+    console.log('🔄 Switching to screen:', screen);
+    
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     
     switch (screen) {
@@ -160,6 +199,7 @@ class JournalApp {
     }
     
     this.appState.currentScreen = screen;
+    console.log('✅ Current screen set to:', this.appState.currentScreen);
   }
 
   private async loadEntries(): Promise<void> {
@@ -187,11 +227,7 @@ class JournalApp {
     container.querySelectorAll('.entry-item').forEach((item, index) => {
       item.addEventListener('click', () => {
         const entry = this.filteredEntries[index];
-        if (entry.draft) {
-          this.editEntry(entry);
-        } else {
-          this.viewEntry(entry);
-        }
+        this.viewEntry(entry);
       });
     });
   }
@@ -311,6 +347,12 @@ class JournalApp {
     this.elements.titleInput.focus();
   }
 
+  private editCurrentEntry(): void {
+    if (this.appState.currentEntry) {
+      this.editEntry(this.appState.currentEntry);
+    }
+  }
+
   private viewEntry(entry: JournalEntry): void {
     this.appState.currentEntry = entry;
     this.elements.viewTitle.textContent = entry.title || 'Untitled';
@@ -321,7 +363,7 @@ class JournalApp {
     const tags = entry.tags.map(tag => `<span class="tag">#${tag}</span>`).join('');
     this.elements.viewTags.innerHTML = tags;
     
-    this.elements.viewBody.textContent = entry.body;
+    this.elements.viewBody.innerHTML = this.renderMarkdown(entry.body);
     
     this.showScreen('view');
   }
@@ -404,8 +446,97 @@ class JournalApp {
     
     localStorage.setItem('theme', newTheme);
   }
+
+  private async exportEntries(): Promise<void> {
+    try {
+      const result = await window.electronAPI.exportEntries();
+      
+      if (result.success) {
+        console.log('Entries exported successfully to:', result.path);
+        // Could add a toast notification here
+      } else if (result.error) {
+        console.error('Export failed:', result.error);
+        // Could add error notification here
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  }
+
+  private applyFormat(format: 'bold' | 'italic'): void {
+    console.log('🎨 applyFormat called with:', format);
+    
+    const textarea = this.elements.bodyTextarea;
+    console.log('📝 Textarea element:', textarea);
+    console.log('📝 Textarea value before:', textarea.value);
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    
+    console.log('📍 Selection:', { start, end, selectedText });
+    
+    let formattedText = '';
+    const marker = format === 'bold' ? '**' : '*';
+    
+    if (selectedText) {
+      // If text is selected, wrap it with formatting
+      formattedText = `${marker}${selectedText}${marker}`;
+    } else {
+      // If no text selected, insert markers with cursor in between
+      formattedText = `${marker}${marker}`;
+    }
+    
+    console.log('🔤 Formatted text to insert:', formattedText);
+    
+    // Replace the selected text with formatted text
+    const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+    textarea.value = newValue;
+    
+    console.log('📝 Textarea value after:', textarea.value);
+    
+    // Position cursor correctly
+    if (selectedText) {
+      textarea.setSelectionRange(start + marker.length, start + marker.length + selectedText.length);
+    } else {
+      textarea.setSelectionRange(start + marker.length, start + marker.length);
+    }
+    
+    textarea.focus();
+    this.updateWordCount();
+    
+    console.log('✅ applyFormat completed');
+  }
+
+  private renderMarkdown(text: string): string {
+    // Simple markdown renderer for bold and italic
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/\n/g, '<br>');
+  }
+
+  // Public method for testing
+  public testBold(): void {
+    console.log('🧪 Testing bold formatting...');
+    this.applyFormat('bold');
+  }
+
+  public testItalic(): void {
+    console.log('🧪 Testing italic formatting...');
+    this.applyFormat('italic');
+  }
+
+  public getScreenState(): string {
+    return this.appState.currentScreen;
+  }
 }
 
+let journalAppInstance: JournalApp;
+
 document.addEventListener('DOMContentLoaded', () => {
-  new JournalApp();
+  journalAppInstance = new JournalApp();
+  
+  // Make it available for testing in browser console
+  (window as any).testApp = journalAppInstance;
 });

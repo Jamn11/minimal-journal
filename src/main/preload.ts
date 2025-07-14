@@ -16,6 +16,9 @@ const electronAPI = {
   
   getPlatform: (): Promise<string> =>
     ipcRenderer.invoke('app:get-platform'),
+  
+  exportEntries: (): Promise<{ success: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('app:export-entries'),
 
   onShortcut: (callback: (shortcut: string) => void) => {
     ipcRenderer.on('shortcut:new-entry', () => callback('new-entry'));
@@ -24,6 +27,7 @@ const electronAPI = {
     ipcRenderer.on('shortcut:escape', () => callback('escape'));
     ipcRenderer.on('shortcut:delete-entry', () => callback('delete-entry'));
     ipcRenderer.on('shortcut:toggle-theme', () => callback('toggle-theme'));
+    ipcRenderer.on('shortcut:edit-entry', () => callback('edit-entry'));
   },
 
   removeAllListeners: () => {
@@ -33,6 +37,7 @@ const electronAPI = {
     ipcRenderer.removeAllListeners('shortcut:escape');
     ipcRenderer.removeAllListeners('shortcut:delete-entry');
     ipcRenderer.removeAllListeners('shortcut:toggle-theme');
+    ipcRenderer.removeAllListeners('shortcut:edit-entry');
   }
 };
 
