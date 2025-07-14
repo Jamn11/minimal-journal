@@ -36,13 +36,21 @@ export class DatabaseManager {
           body TEXT NOT NULL,
           timestamp TEXT NOT NULL,
           tags TEXT NOT NULL,
-          draft INTEGER NOT NULL DEFAULT 0
+          draft INTEGER NOT NULL DEFAULT 0,
+          lastModified TEXT
         )
       `;
       
       this.db.run(sql, (err) => {
-        if (err) reject(err);
-        else resolve();
+        if (err) {
+          reject(err);
+        } else {
+          // Add lastModified column if it doesn't exist (for existing databases)
+          this.db.run('ALTER TABLE entries ADD COLUMN lastModified TEXT', (alterErr) => {
+            // Ignore error if column already exists
+            resolve();
+          });
+        }
       });
     });
   }
@@ -50,6 +58,7 @@ export class DatabaseManager {
   async saveEntry(entry: Partial<JournalEntry>): Promise<JournalEntry> {
     const id = entry.id || uuidv4();
     const timestamp = entry.timestamp || new Date().toISOString();
+    const lastModified = entry.lastModified;
     const tags = this.extractTags(entry.body || '');
     
     const fullEntry: JournalEntry = {
@@ -57,14 +66,15 @@ export class DatabaseManager {
       title: entry.title || '',
       body: entry.body || '',
       timestamp,
+      lastModified,
       tags,
       draft: entry.draft || false
     };
 
     return new Promise((resolve, reject) => {
       const sql = `
-        INSERT OR REPLACE INTO entries (id, title, body, timestamp, tags, draft)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO entries (id, title, body, timestamp, tags, draft, lastModified)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `;
       
       const params = [
@@ -73,7 +83,8 @@ export class DatabaseManager {
         fullEntry.body,
         fullEntry.timestamp,
         JSON.stringify(fullEntry.tags),
-        fullEntry.draft ? 1 : 0
+        fullEntry.draft ? 1 : 0,
+        fullEntry.lastModified
       ];
 
       this.db.run(sql, params, (err) => {
@@ -168,6 +179,7 @@ export class DatabaseManager {
       title: row.title,
       body: row.body,
       timestamp: row.timestamp,
+      lastModified: row.lastModified || undefined,
       tags: JSON.parse(row.tags),
       draft: row.draft === 1
     };

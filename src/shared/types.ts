@@ -3,6 +3,7 @@ export interface JournalEntry {
   title: string;
   body: string;
   timestamp: string;
+  lastModified?: string;
   tags: string[];
   draft: boolean;
 }

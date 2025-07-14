@@ -9,6 +9,11 @@ class JournalApp {
     this.entries = [];
     this.filteredEntries = [];
     this.currentFilters = {};
+    
+    // Security state
+    this.failedPasswordAttempts = 0;
+    this.lockoutEndTime = null;
+    this.sessionTimeout = null;
 
     this.elements = this.getElements();
     this.init();
@@ -41,13 +46,38 @@ class JournalApp {
       clearFilters: document.getElementById('clear-filters'),
       cancelFilters: document.getElementById('cancel-filters'),
       settingsModal: document.getElementById('settings-modal'),
+      closeSettings: document.getElementById('close-settings'),
+      tabButtons: document.querySelectorAll('.tab-button'),
+      tabContents: document.querySelectorAll('.tab-content'),
       fontFamilySelect: document.getElementById('font-family-select'),
       fontSizeSlider: document.getElementById('font-size-slider'),
       fontSizeValue: document.getElementById('font-size-value'),
       lightTheme: document.getElementById('light-theme'),
       darkTheme: document.getElementById('dark-theme'),
-      saveSettings: document.getElementById('save-settings'),
-      cancelSettings: document.getElementById('cancel-settings'),
+      // Security elements
+      passwordProtectionEnabled: document.getElementById('password-protection-enabled'),
+      passwordSettings: document.getElementById('password-settings'),
+      changePasswordSection: document.getElementById('change-password-section'),
+      newPassword: document.getElementById('new-password'),
+      confirmPassword: document.getElementById('confirm-password'),
+      savePassword: document.getElementById('save-password'),
+      passwordFeedback: document.getElementById('password-feedback'),
+      currentPassword: document.getElementById('current-password'),
+      newPasswordChange: document.getElementById('new-password-change'),
+      confirmPasswordChange: document.getElementById('confirm-password-change'),
+      changePassword: document.getElementById('change-password'),
+      changePasswordFeedback: document.getElementById('change-password-feedback'),
+      // Password entry modal
+      passwordEntryModal: document.getElementById('password-entry-modal'),
+      passwordEntryInput: document.getElementById('password-entry-input'),
+      passwordEntrySubmit: document.getElementById('password-entry-submit'),
+      passwordEntryError: document.getElementById('password-entry-error'),
+      // Disable protection modal
+      disableProtectionModal: document.getElementById('disable-protection-modal'),
+      disableProtectionInput: document.getElementById('disable-protection-input'),
+      disableProtectionConfirm: document.getElementById('disable-protection-confirm'),
+      disableProtectionCancel: document.getElementById('disable-protection-cancel'),
+      disableProtectionError: document.getElementById('disable-protection-error'),
     };
   }
 
@@ -63,9 +93,16 @@ class JournalApp {
 
     this.setupEventListeners();
     this.setupKeyboardShortcuts();
+    this.setupSecureModalHandling();
     this.initializeSettings();
-    await this.loadEntries();
-    this.showScreen('home');
+    
+    // Check if password protection is enabled
+    if (this.isPasswordProtectionEnabled()) {
+      await this.showPasswordEntry();
+    } else {
+      await this.loadEntries();
+      this.showScreen('home');
+    }
     
     console.log('JournalApp initialized successfully');
   }
@@ -87,11 +124,43 @@ class JournalApp {
     this.elements.clearFilters.addEventListener('click', () => this.clearFilters());
     this.elements.cancelFilters.addEventListener('click', () => this.hideFilterModal());
 
-    this.elements.saveSettings.addEventListener('click', () => this.saveSettings());
-    this.elements.cancelSettings.addEventListener('click', () => this.hideSettingsModal());
-    this.elements.fontSizeSlider.addEventListener('input', () => this.updateFontSizeDisplay());
-    this.elements.lightTheme.addEventListener('click', () => this.selectTheme('light'));
-    this.elements.darkTheme.addEventListener('click', () => this.selectTheme('dark'));
+    this.elements.closeSettings.addEventListener('click', () => this.hideSettingsModal());
+    this.elements.fontSizeSlider.addEventListener('input', () => {
+      this.updateFontSizeDisplay();
+      this.autoSaveFontSize();
+    });
+    this.elements.fontFamilySelect.addEventListener('change', () => this.autoSaveFontFamily());
+    this.elements.lightTheme.addEventListener('click', () => this.selectAndSaveTheme('light'));
+    this.elements.darkTheme.addEventListener('click', () => this.selectAndSaveTheme('dark'));
+
+    // Security event listeners
+    this.elements.passwordProtectionEnabled.addEventListener('change', () => this.togglePasswordProtection());
+    this.elements.savePassword.addEventListener('click', () => this.saveNewPassword());
+    this.elements.changePassword.addEventListener('click', () => this.changeExistingPassword());
+    this.elements.passwordEntrySubmit.addEventListener('click', () => this.submitPasswordEntry());
+    this.elements.passwordEntryInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.submitPasswordEntry();
+      }
+    });
+
+    // Disable protection modal event listeners
+    this.elements.disableProtectionConfirm.addEventListener('click', () => this.confirmDisableProtection());
+    this.elements.disableProtectionCancel.addEventListener('click', () => this.cancelDisableProtection());
+    this.elements.disableProtectionInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.confirmDisableProtection();
+      }
+    });
+
+    // Tab switching
+    this.elements.tabButtons.forEach(button => {
+      button.addEventListener('click', () => this.switchTab(button.dataset.tab));
+    });
 
     this.elements.filterModal.addEventListener('click', (e) => {
       if (e.target === this.elements.filterModal) {
@@ -163,6 +232,17 @@ class JournalApp {
       if (this.elements.settingsModal.classList.contains('active') && e.key === 'Enter') {
         e.preventDefault();
         this.saveSettings();
+        return;
+      }
+
+      // Tab navigation in settings modal
+      if (this.elements.settingsModal.classList.contains('active') && e.key === 'Tab' && e.ctrlKey) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          this.navigateTabLeft();
+        } else {
+          this.navigateTabRight();
+        }
         return;
       }
       
@@ -241,17 +321,25 @@ class JournalApp {
   }
 
   createEntryHTML(entry) {
-    const date = new Date(entry.timestamp).toLocaleDateString();
-    const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const createdDate = new Date(entry.timestamp).toLocaleDateString();
+    const createdTime = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const preview = entry.body.slice(0, 80) + (entry.body.length > 80 ? '...' : '');
     const tags = entry.tags.map(tag => `<span class="tag">#${tag}</span>`).join('');
     const draftIndicator = entry.draft ? '<span class="draft-indicator">DRAFT</span>' : '';
+
+    let timestampHTML = `<div class="entry-timestamp">Created: ${createdDate} ${createdTime}`;
+    if (entry.lastModified) {
+      const modifiedDate = new Date(entry.lastModified).toLocaleDateString();
+      const modifiedTime = new Date(entry.lastModified).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      timestampHTML += `<br>Last modified: ${modifiedDate} ${modifiedTime}`;
+    }
+    timestampHTML += '</div>';
 
     return `
       <div class="entry-item">
         <div class="entry-header">
           <div class="entry-title">${entry.title || 'Untitled'}</div>
-          <div class="entry-timestamp">${date} ${time}</div>
+          ${timestampHTML}
           <div class="entry-tags">
             ${draftIndicator}
             ${tags}
@@ -392,9 +480,22 @@ class JournalApp {
         draft: false,
       };
 
+      // Preserve original timestamp when editing existing entry
+      if (this.appState.editingEntryId) {
+        const existingEntry = await window.electronAPI.getEntry(this.appState.editingEntryId);
+        if (existingEntry) {
+          entry.timestamp = existingEntry.timestamp;
+          entry.lastModified = new Date().toISOString();
+        }
+      }
+
       console.log('Saving entry:', entry);
       await window.electronAPI.saveEntry(entry);
       await this.loadEntries();
+      // Update streak grid if it's visible
+      if (document.getElementById('streak-grid')) {
+        this.updateStreakGrid();
+      }
       this.showScreen('home');
     } catch (error) {
       console.error('Failed to save entry:', error);
@@ -419,9 +520,22 @@ class JournalApp {
         draft: true,
       };
 
+      // Preserve original timestamp when editing existing entry
+      if (this.appState.editingEntryId) {
+        const existingEntry = await window.electronAPI.getEntry(this.appState.editingEntryId);
+        if (existingEntry) {
+          entry.timestamp = existingEntry.timestamp;
+          entry.lastModified = new Date().toISOString();
+        }
+      }
+
       console.log('Saving draft:', entry);
       await window.electronAPI.saveEntry(entry);
       await this.loadEntries();
+      // Update streak grid if it's visible (only for non-drafts)
+      if (document.getElementById('streak-grid') && !entry.draft) {
+        this.updateStreakGrid();
+      }
       this.showScreen('home');
     } catch (error) {
       console.error('Failed to save draft:', error);
@@ -561,6 +675,41 @@ class JournalApp {
     this.elements.settingsModal.classList.remove('active');
   }
 
+  switchTab(tabName) {
+    // Remove active class from all tabs and tab contents
+    this.elements.tabButtons.forEach(button => button.classList.remove('active'));
+    this.elements.tabContents.forEach(content => content.classList.remove('active'));
+    
+    // Add active class to selected tab and content
+    const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+    const activeContent = document.getElementById(`${tabName}-tab`);
+    
+    if (activeButton && activeContent) {
+      activeButton.classList.add('active');
+      activeContent.classList.add('active');
+    }
+  }
+
+  navigateTabRight() {
+    const tabs = ['appearance', 'habits', 'templates', 'security', 'general'];
+    const activeTab = document.querySelector('.tab-button.active');
+    if (!activeTab) return;
+    
+    const currentIndex = tabs.indexOf(activeTab.dataset.tab);
+    const nextIndex = (currentIndex + 1) % tabs.length;
+    this.switchTab(tabs[nextIndex]);
+  }
+
+  navigateTabLeft() {
+    const tabs = ['appearance', 'habits', 'templates', 'security', 'general'];
+    const activeTab = document.querySelector('.tab-button.active');
+    if (!activeTab) return;
+    
+    const currentIndex = tabs.indexOf(activeTab.dataset.tab);
+    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    this.switchTab(tabs[prevIndex]);
+  }
+
   loadCurrentSettings() {
     // Load current font family
     const currentFontFamily = localStorage.getItem('fontFamily') || 'Courier New, Monaco, Menlo, monospace';
@@ -615,6 +764,28 @@ class JournalApp {
     this.hideSettingsModal();
   }
 
+  autoSaveFontSize() {
+    const fontSize = this.elements.fontSizeSlider.value;
+    localStorage.setItem('fontSize', fontSize);
+    document.documentElement.style.setProperty('--app-font-size', fontSize + 'px');
+  }
+
+  autoSaveFontFamily() {
+    const fontFamily = this.elements.fontFamilySelect.value;
+    localStorage.setItem('fontFamily', fontFamily);
+    document.documentElement.style.setProperty('--app-font-family', fontFamily);
+  }
+
+  selectAndSaveTheme(theme) {
+    this.updateThemeButtons(theme);
+    localStorage.setItem('theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }
+
   applySettings(fontFamily, fontSize, theme) {
     // Apply font family and size to the entire app
     document.documentElement.style.setProperty('--app-font-family', fontFamily);
@@ -634,6 +805,442 @@ class JournalApp {
     const theme = localStorage.getItem('theme') || 'dark';
     
     this.applySettings(fontFamily, fontSize, theme);
+  }
+
+  // Streak tracking methods
+  initializeStreakGrid() {
+    const grid = document.getElementById('streak-grid');
+    if (!grid) return;
+
+    // Clear existing grid
+    grid.innerHTML = '';
+
+    // Create 49 squares (7x7 grid)
+    for (let i = 0; i < 49; i++) {
+      const day = document.createElement('div');
+      day.className = 'streak-day';
+      grid.appendChild(day);
+    }
+
+    this.updateStreakGrid();
+  }
+
+  async updateStreakGrid() {
+    try {
+      const entries = await window.electronAPI.getAllEntries();
+      const grid = document.getElementById('streak-grid');
+      const streakNumber = document.getElementById('current-streak');
+      
+      if (!grid || !streakNumber) return;
+
+      // Get dates for the last 49 days (most recent first for top-down filling)
+      const today = new Date();
+      const dates = [];
+      for (let i = 0; i < 49; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        dates.push(date);
+      }
+
+      // Create a set of dates that have entries (non-drafts only)
+      const entryDates = new Set();
+      entries.forEach(entry => {
+        if (!entry.draft) {
+          const entryDate = new Date(entry.timestamp);
+          const dateString = entryDate.toDateString();
+          entryDates.add(dateString);
+        }
+      });
+
+      // Update grid squares
+      const daySquares = grid.querySelectorAll('.streak-day');
+      dates.forEach((date, index) => {
+        const daySquare = daySquares[index];
+        const dateString = date.toDateString();
+        const hasEntry = entryDates.has(dateString);
+        const isToday = date.toDateString() === today.toDateString();
+
+        daySquare.classList.remove('filled', 'today');
+        
+        if (hasEntry) {
+          daySquare.classList.add('filled');
+        }
+        
+        if (isToday) {
+          daySquare.classList.add('today');
+        }
+      });
+
+      // Calculate current streak
+      const currentStreak = this.calculateCurrentStreak(entryDates);
+      streakNumber.textContent = currentStreak;
+      
+    } catch (error) {
+      console.error('Failed to update streak grid:', error);
+    }
+  }
+
+  calculateCurrentStreak(entryDates) {
+    const today = new Date();
+    let streak = 0;
+    let currentDate = new Date(today);
+
+    // Check if today has an entry, if not start from yesterday
+    if (!entryDates.has(today.toDateString())) {
+      currentDate.setDate(currentDate.getDate() - 1);
+    }
+
+    // Count consecutive days with entries going backwards
+    while (entryDates.has(currentDate.toDateString())) {
+      streak++;
+      currentDate.setDate(currentDate.getDate() - 1);
+    }
+
+    return streak;
+  }
+
+  // Override showSettingsModal to initialize habits when opened
+  showSettingsModal() {
+    this.loadCurrentSettings();
+    this.loadSecuritySettings();
+    this.elements.settingsModal.classList.add('active');
+    // Initialize streak grid when settings modal opens
+    setTimeout(() => this.initializeStreakGrid(), 100);
+  }
+
+  // Password Protection Methods
+  isPasswordProtectionEnabled() {
+    return localStorage.getItem('passwordProtectionEnabled') === 'true';
+  }
+
+  getStoredPasswordHash() {
+    return localStorage.getItem('appPasswordHash');
+  }
+
+  async hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async verifyPassword(password) {
+    const storedHash = this.getStoredPasswordHash();
+    if (!storedHash) return false;
+    const inputHash = await this.hashPassword(password);
+    return inputHash === storedHash;
+  }
+
+  loadSecuritySettings() {
+    const isEnabled = this.isPasswordProtectionEnabled();
+    this.elements.passwordProtectionEnabled.checked = isEnabled;
+    
+    if (isEnabled) {
+      this.elements.passwordSettings.style.display = 'none';
+      this.elements.changePasswordSection.style.display = 'block';
+    } else {
+      this.elements.passwordSettings.style.display = 'none';
+      this.elements.changePasswordSection.style.display = 'none';
+    }
+  }
+
+  togglePasswordProtection() {
+    const isEnabled = this.elements.passwordProtectionEnabled.checked;
+    
+    if (isEnabled && !this.getStoredPasswordHash()) {
+      // Show password setup
+      this.elements.passwordSettings.style.display = 'block';
+      this.elements.changePasswordSection.style.display = 'none';
+    } else if (isEnabled) {
+      // Already has password, show change option
+      this.elements.passwordSettings.style.display = 'none';
+      this.elements.changePasswordSection.style.display = 'block';
+      localStorage.setItem('passwordProtectionEnabled', 'true');
+    } else {
+      // Trying to disable protection - require password verification
+      if (this.getStoredPasswordHash()) {
+        // Reset checkbox and show verification modal
+        this.elements.passwordProtectionEnabled.checked = true;
+        this.showDisableProtectionModal();
+      } else {
+        // No password set, can disable freely
+        this.elements.passwordSettings.style.display = 'none';
+        this.elements.changePasswordSection.style.display = 'none';
+        localStorage.setItem('passwordProtectionEnabled', 'false');
+      }
+    }
+  }
+
+  async saveNewPassword() {
+    const newPassword = this.elements.newPassword.value;
+    const confirmPassword = this.elements.confirmPassword.value;
+    
+    this.clearFeedback('password-feedback');
+    
+    // Enhanced password validation
+    const strengthCheck = this.validatePasswordStrength(newPassword);
+    if (!strengthCheck.valid) {
+      this.showFeedback('password-feedback', strengthCheck.message, 'error');
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      this.showFeedback('password-feedback', 'Passcodes do not match.', 'error');
+      return;
+    }
+    
+    try {
+      const hashedPassword = await this.hashPassword(newPassword);
+      localStorage.setItem('appPasswordHash', hashedPassword);
+      localStorage.setItem('passwordProtectionEnabled', 'true');
+      
+      this.elements.newPassword.value = '';
+      this.elements.confirmPassword.value = '';
+      this.elements.passwordSettings.style.display = 'none';
+      this.elements.changePasswordSection.style.display = 'block';
+      
+      this.showFeedback('password-feedback', 'Passcode saved successfully!', 'success');
+      setTimeout(() => this.clearFeedback('password-feedback'), 3000);
+    } catch (error) {
+      this.showFeedback('password-feedback', 'Error saving passcode. Please try again.', 'error');
+    }
+  }
+
+  async changeExistingPassword() {
+    const currentPassword = this.elements.currentPassword.value;
+    const newPassword = this.elements.newPasswordChange.value;
+    const confirmPassword = this.elements.confirmPasswordChange.value;
+    
+    this.clearFeedback('change-password-feedback');
+    
+    if (!currentPassword) {
+      this.showFeedback('change-password-feedback', 'Please enter your current passcode.', 'error');
+      return;
+    }
+    
+    const isCurrentValid = await this.verifyPassword(currentPassword);
+    if (!isCurrentValid) {
+      this.showFeedback('change-password-feedback', 'Current passcode is incorrect.', 'error');
+      return;
+    }
+    
+    const strengthCheck = this.validatePasswordStrength(newPassword);
+    if (!strengthCheck.valid) {
+      this.showFeedback('change-password-feedback', strengthCheck.message, 'error');
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      this.showFeedback('change-password-feedback', 'New passcodes do not match.', 'error');
+      return;
+    }
+    
+    try {
+      const hashedPassword = await this.hashPassword(newPassword);
+      localStorage.setItem('appPasswordHash', hashedPassword);
+      
+      this.elements.currentPassword.value = '';
+      this.elements.newPasswordChange.value = '';
+      this.elements.confirmPasswordChange.value = '';
+      
+      this.showFeedback('change-password-feedback', 'Passcode changed successfully!', 'success');
+      setTimeout(() => this.clearFeedback('change-password-feedback'), 3000);
+    } catch (error) {
+      this.showFeedback('change-password-feedback', 'Error changing passcode. Please try again.', 'error');
+    }
+  }
+
+  async showPasswordEntry() {
+    this.elements.passwordEntryModal.classList.add('active');
+    this.elements.passwordEntryInput.focus();
+    this.clearFeedback('password-entry-error');
+  }
+
+  async submitPasswordEntry() {
+    const password = this.elements.passwordEntryInput.value;
+    
+    if (!password) {
+      this.showFeedback('password-entry-error', 'Please enter your passcode.', 'error');
+      return;
+    }
+
+    // Check for lockout
+    if (this.isLockedOut()) {
+      const remainingTime = Math.ceil((this.lockoutEndTime - Date.now()) / 1000);
+      this.showFeedback('password-entry-error', `Too many failed attempts. Try again in ${remainingTime} seconds.`, 'error');
+      this.elements.passwordEntryInput.value = '';
+      return;
+    }
+    
+    const isValid = await this.verifyPasswordWithBruteForceProtection(password);
+    
+    if (isValid) {
+      this.failedPasswordAttempts = 0;
+      this.lockoutEndTime = null;
+      this.elements.passwordEntryModal.classList.remove('active');
+      this.elements.passwordEntryInput.value = '';
+      this.clearFeedback('password-entry-error');
+      this.startSessionTimeout();
+      await this.loadEntries();
+      this.showScreen('home');
+    } else {
+      this.handleFailedPasswordAttempt();
+      this.showFeedback('password-entry-error', 'Incorrect passcode. Please try again.', 'error');
+      this.elements.passwordEntryInput.value = '';
+      this.elements.passwordEntryInput.focus();
+    }
+  }
+
+  showFeedback(elementId, message, type) {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.textContent = message;
+      element.className = `password-feedback ${type}`;
+    }
+  }
+
+  clearFeedback(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.textContent = '';
+      element.className = 'password-feedback';
+    }
+  }
+
+  showDisableProtectionModal() {
+    this.elements.disableProtectionModal.classList.add('active');
+    this.elements.disableProtectionInput.focus();
+    this.elements.disableProtectionInput.value = '';
+    this.clearFeedback('disable-protection-error');
+  }
+
+  hideDisableProtectionModal() {
+    this.elements.disableProtectionModal.classList.remove('active');
+    this.elements.disableProtectionInput.value = '';
+    this.clearFeedback('disable-protection-error');
+  }
+
+  async confirmDisableProtection() {
+    const password = this.elements.disableProtectionInput.value;
+    
+    if (!password) {
+      this.showFeedback('disable-protection-error', 'Please enter your current passcode.', 'error');
+      return;
+    }
+    
+    // Add delay to prevent rapid attempts
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const isValid = await this.verifyPassword(password);
+    
+    if (isValid) {
+      // Password correct, disable protection
+      this.elements.passwordProtectionEnabled.checked = false;
+      this.elements.passwordSettings.style.display = 'none';
+      this.elements.changePasswordSection.style.display = 'none';
+      localStorage.setItem('passwordProtectionEnabled', 'false');
+      
+      // Clear session timeout when protection is disabled
+      if (this.sessionTimeout) {
+        clearTimeout(this.sessionTimeout);
+        this.sessionTimeout = null;
+      }
+      
+      this.hideDisableProtectionModal();
+    } else {
+      this.showFeedback('disable-protection-error', 'Incorrect passcode. Please try again.', 'error');
+      this.elements.disableProtectionInput.value = '';
+      this.elements.disableProtectionInput.focus();
+    }
+  }
+
+  cancelDisableProtection() {
+    // Keep protection enabled, just close modal
+    this.elements.passwordProtectionEnabled.checked = true;
+    this.hideDisableProtectionModal();
+  }
+
+  // Brute force protection methods
+  isLockedOut() {
+    return this.lockoutEndTime && Date.now() < this.lockoutEndTime;
+  }
+
+  handleFailedPasswordAttempt() {
+    this.failedPasswordAttempts++;
+    
+    if (this.failedPasswordAttempts >= 5) {
+      // Lock out for 30 seconds after 5 failed attempts
+      this.lockoutEndTime = Date.now() + (30 * 1000);
+    } else if (this.failedPasswordAttempts >= 3) {
+      // Lock out for 10 seconds after 3 failed attempts
+      this.lockoutEndTime = Date.now() + (10 * 1000);
+    }
+  }
+
+  async verifyPasswordWithBruteForceProtection(password) {
+    // Add small delay to prevent rapid attempts
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    return await this.verifyPassword(password);
+  }
+
+  // Session timeout methods
+  startSessionTimeout() {
+    // Auto-lock after 30 minutes of inactivity
+    this.resetSessionTimeout();
+    
+    // Listen for user activity
+    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+      document.addEventListener(event, () => this.resetSessionTimeout(), true);
+    });
+  }
+
+  resetSessionTimeout() {
+    if (this.sessionTimeout) {
+      clearTimeout(this.sessionTimeout);
+    }
+    
+    // Only set timeout if password protection is enabled and user is logged in
+    if (this.isPasswordProtectionEnabled() && !this.elements.passwordEntryModal.classList.contains('active')) {
+      this.sessionTimeout = setTimeout(() => {
+        this.lockSession();
+      }, 30 * 60 * 1000); // 30 minutes
+    }
+  }
+
+  lockSession() {
+    if (this.isPasswordProtectionEnabled()) {
+      this.showPasswordEntry();
+    }
+  }
+
+  // Prevent ESC key from closing password modals
+  setupSecureModalHandling() {
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        // Prevent ESC from closing password entry or disable protection modals
+        if (this.elements.passwordEntryModal.classList.contains('active') ||
+            this.elements.disableProtectionModal.classList.contains('active')) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }
+    }, true);
+  }
+
+  // Enhanced password strength validation
+  validatePasswordStrength(password) {
+    if (password.length < 6) {
+      return { valid: false, message: 'Passcode must be at least 6 characters long.' };
+    }
+    
+    if (!/(?=.*[a-zA-Z])(?=.*[0-9])/.test(password) && password.length < 8) {
+      return { valid: false, message: 'Passcode should be at least 8 characters OR contain both letters and numbers.' };
+    }
+    
+    return { valid: true, message: '' };
   }
 }
 

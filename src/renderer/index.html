@@ -70,49 +70,179 @@
 
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal">
-        <div class="modal-content settings-modal-content">
-            <h3>Settings</h3>
-            
-            <div class="settings-section">
-                <label>Font Family:</label>
-                <select id="font-family-select">
-                    <option value="Courier New, Monaco, Menlo, monospace">Courier New (Default)</option>
-                    <option value="Georgia, serif">Georgia</option>
-                    <option value="Times New Roman, serif">Times New Roman</option>
-                    <option value="Arial, sans-serif">Arial</option>
-                    <option value="Helvetica, sans-serif">Helvetica</option>
-                    <option value="SF Pro Text, -apple-system, system-ui">SF Pro Text</option>
-                    <option value="Consolas, Monaco, monospace">Consolas</option>
-                    <option value="Fira Code, monospace">Fira Code</option>
-                    <option value="Comic Sans MS, cursive">Comic Sans MS</option>
-                </select>
+        <div class="settings-container">
+            <div class="settings-tabs">
+                <button class="tab-button active" data-tab="appearance">Appearance</button>
+                <button class="tab-button" data-tab="habits">Habits</button>
+                <button class="tab-button" data-tab="templates">Templates</button>
+                <button class="tab-button" data-tab="security">Security</button>
+                <button class="tab-button" data-tab="general">General</button>
+                <button id="close-settings" class="close-tab">×</button>
             </div>
 
-            <div class="settings-section">
-                <label>Font Size:</label>
-                <div class="font-size-controls">
-                    <input type="range" id="font-size-slider" min="12" max="24" value="16" step="1">
-                    <span id="font-size-value">16px</span>
+            <div class="settings-content">
+                <!-- Appearance Tab -->
+                <div id="appearance-tab" class="tab-content active">
+                    <div class="settings-section">
+                        <label>Font Family:</label>
+                        <select id="font-family-select">
+                            <option value="Courier New, Monaco, Menlo, monospace">Courier New (Default)</option>
+                            <option value="Georgia, serif">Georgia</option>
+                            <option value="Times New Roman, serif">Times New Roman</option>
+                            <option value="Arial, sans-serif">Arial</option>
+                            <option value="Helvetica, sans-serif">Helvetica</option>
+                            <option value="SF Pro Text, -apple-system, system-ui">SF Pro Text</option>
+                            <option value="Consolas, Monaco, monospace">Consolas</option>
+                            <option value="Fira Code, monospace">Fira Code</option>
+                            <option value="Comic Sans MS, cursive">Comic Sans MS</option>
+                        </select>
+                    </div>
+
+                    <div class="settings-section">
+                        <label>Font Size:</label>
+                        <div class="font-size-controls">
+                            <input type="range" id="font-size-slider" min="12" max="24" value="16" step="1">
+                            <span id="font-size-value">16px</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <label>Theme:</label>
+                        <div class="theme-controls">
+                            <button id="light-theme" class="theme-option">☀️ Light</button>
+                            <button id="dark-theme" class="theme-option active">🌙 Dark</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Habits Tab -->
+                <div id="habits-tab" class="tab-content">
+                    <div class="habits-container">
+                        <div class="habits-box">
+                            <div class="streak-grid-container">
+                                <h3>Writing Streak</h3>
+                                <div class="week-labels">
+                                    <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+                                </div>
+                                <div id="streak-grid" class="streak-grid"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="habits-box">
+                            <div class="streak-counter">
+                                <div class="streak-number" id="current-streak">0</div>
+                                <div class="streak-label">day streak</div>
+                            </div>
+                        </div>
+                        
+                        <div class="habits-box">
+                            <div class="notification-section">
+                                <h3>Daily Reminders</h3>
+                                <div class="notification-controls">
+                                    <div class="notification-setting">
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" id="notification-enabled">
+                                            <span class="checkmark"></span>
+                                            Enable notifications
+                                        </label>
+                                    </div>
+                                    <div class="notification-time">
+                                        <label>Reminder time:</label>
+                                        <input type="time" id="notification-time" value="20:00">
+                                    </div>
+                                    <div class="notification-frequency">
+                                        <label>Frequency:</label>
+                                        <select id="notification-frequency">
+                                            <option value="daily">Daily</option>
+                                            <option value="weekly">Weekly</option>
+                                            <option value="monthly">Monthly</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Templates Tab -->
+                <div id="templates-tab" class="tab-content">
+                    <div class="empty-tab">
+                        <p>Entry templates coming soon...</p>
+                    </div>
+                </div>
+
+                <!-- Security Tab -->
+                <div id="security-tab" class="tab-content">
+                    <div class="settings-section">
+                        <label>App Protection:</label>
+                        <div class="security-controls">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="password-protection-enabled">
+                                <span class="checkmark"></span>
+                                Require passcode to access app
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div id="password-settings" class="settings-section" style="display: none;">
+                        <label>Set Passcode:</label>
+                        <div class="password-inputs">
+                            <input type="password" id="new-password" placeholder="Enter new passcode" class="password-input">
+                            <input type="password" id="confirm-password" placeholder="Confirm passcode" class="password-input">
+                            <button id="save-password" class="save-password-button">Save Passcode</button>
+                        </div>
+                        <div id="password-feedback" class="password-feedback"></div>
+                    </div>
+                    
+                    <div id="change-password-section" class="settings-section" style="display: none;">
+                        <label>Change Passcode:</label>
+                        <div class="password-inputs">
+                            <input type="password" id="current-password" placeholder="Current passcode" class="password-input">
+                            <input type="password" id="new-password-change" placeholder="New passcode" class="password-input">
+                            <input type="password" id="confirm-password-change" placeholder="Confirm new passcode" class="password-input">
+                            <button id="change-password" class="save-password-button">Change Passcode</button>
+                        </div>
+                        <div id="change-password-feedback" class="password-feedback"></div>
+                    </div>
+                </div>
+
+                <!-- General Tab -->
+                <div id="general-tab" class="tab-content">
+                    <div class="settings-section">
+                        <label>Data Export:</label>
+                        <button id="export-button" class="export-button">Export All Entries</button>
+                    </div>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <div class="settings-section">
-                <label>Theme:</label>
-                <div class="theme-controls">
-                    <button id="light-theme" class="theme-option">☀️ Light</button>
-                    <button id="dark-theme" class="theme-option active">🌙 Dark</button>
+    <!-- Password Entry Modal -->
+    <div id="password-entry-modal" class="modal" style="z-index: 2000;">
+        <div class="modal-content password-entry-content">
+            <h3>Enter Passcode</h3>
+            <p>This application is protected. Please enter your passcode to continue.</p>
+            <div class="password-entry-form">
+                <input type="password" id="password-entry-input" placeholder="Enter passcode" class="password-input" autofocus>
+                <button id="password-entry-submit" class="save-password-button">Unlock</button>
+            </div>
+            <div id="password-entry-error" class="password-feedback error-feedback"></div>
+        </div>
+    </div>
+
+    <!-- Disable Protection Verification Modal -->
+    <div id="disable-protection-modal" class="modal" style="z-index: 2000;">
+        <div class="modal-content password-entry-content">
+            <h3>Disable Protection</h3>
+            <p>Enter your current passcode to disable app protection.</p>
+            <div class="password-entry-form">
+                <input type="password" id="disable-protection-input" placeholder="Enter current passcode" class="password-input" autofocus>
+                <div class="modal-buttons" style="flex-direction: row; gap: 12px; margin-top: 16px;">
+                    <button id="disable-protection-confirm" class="save-password-button" style="max-width: none; flex: 1;">Disable Protection</button>
+                    <button id="disable-protection-cancel" class="save-password-button" style="max-width: none; flex: 1; background-color: var(--bg-tertiary); color: var(--text-primary);">Cancel</button>
                 </div>
             </div>
-
-            <div class="settings-section">
-                <label>Export:</label>
-                <button id="export-button" class="export-button">Export All Entries</button>
-            </div>
-
-            <div class="modal-buttons">
-                <button id="save-settings">Save</button>
-                <button id="cancel-settings">Cancel</button>
-            </div>
+            <div id="disable-protection-error" class="password-feedback error-feedback"></div>
         </div>
     </div>
 
