@@ -30,11 +30,13 @@ This is an Electron-based minimalist journal app with a three-screen architectur
 3. **View Screen** - Read individual entries
 
 ### Critical File Locations
-- **Runtime JavaScript**: `src/renderer/app-browser.js` - This is the actual runtime file that must be edited for functionality
+- **Runtime JavaScript**: `src/renderer/app-browser.js` - This is the actual runtime file that must be edited for functionality (refactored into modular architecture)
 - **TypeScript Source**: `src/renderer/app.ts` - Original TypeScript source (not used at runtime)
 - **Main Process**: `src/main/main.ts` - Electron main process and menu setup
 - **Database**: `src/main/database.ts` - SQLite database operations
 - **Preload**: `src/main/preload.ts` - Electron context bridge for IPC
+- **Module Files**: `src/renderer/modules/` - Individual module files (for reference only)
+- **Refactoring Documentation**: `REFACTORING_DOCUMENTATION.md` - Complete documentation of the modular architecture
 
 ### Database Schema
 Uses SQLite with entries table:
@@ -74,11 +76,27 @@ The build command copies three essential files from `src/renderer/` to `dist/ren
 
 ### Development Notes
 - **Dual JavaScript Architecture**: Both `app.ts` (TypeScript) and `app-browser.js` (runtime JS) exist - always edit the runtime file for immediate changes
+- **Modular Architecture**: The app-browser.js file is organized into 8 distinct modules for better maintainability
 - **Settings Persistence**: Uses localStorage for user preferences and security settings
 - **CSS Custom Properties**: Dynamic theming via `--app-font-family`, `--app-font-size`
 - **Electron Shortcuts**: Global shortcuts handled via `window.electronAPI.onShortcut`
 - **Security Architecture**: Password hashing with SHA-256, brute force protection, session management
 - **Responsive Design**: Settings tabs and habits page adapt to window size with flexbox layouts
+
+### Modular Architecture (New)
+The app-browser.js file has been refactored into 8 modules for better organization:
+
+1. **UIManager** - DOM element management and screen navigation
+2. **Utils** - Static utility functions (formatting, validation, export)
+3. **EntryManager** - Journal entry CRUD operations and state management
+4. **SearchFilter** - Search and filtering functionality with debouncing
+5. **SettingsManager** - Application settings and preferences management
+6. **HabitsManager** - Streak tracking and habits grid management
+7. **SecurityManager** - Password protection, brute force protection, session timeout
+8. **EventHandler** - Centralized event handling and keyboard shortcuts
+9. **JournalApp Controller** - Main application controller and module coordination
+
+Each module has a single responsibility and clear interfaces, making the codebase easier to maintain and extend.
 
 ## Important Conventions
 - Use Courier New font family as default

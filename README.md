@@ -4,25 +4,33 @@ A clean, minimalist journal app built with Electron and TypeScript. Perfect for 
 
 ## Features
 
+### Core Functionality
 - **Clean Interface**: Minimalist design with customizable themes and fonts
 - **Three Main Screens**: Home (entry list), Journal (writing), and View (reading)
 - **Automatic Tagging**: Use `#hashtags` in your entries for automatic tag parsing
 - **Search & Filter**: Search by content, filter by tags and date ranges
 - **Draft System**: Auto-save drafts with ESC key, continue editing later
 - **Text Formatting**: Bold (`**text**`) and italic (`*text*`) markdown support with keyboard shortcuts
-- **Comprehensive Settings**: Customizable font family, font size, and themes
-- **Export Functionality**: Export all entries to markdown format
-- **Keyboard Shortcuts**: Full keyboard navigation for productivity
 - **Local Storage**: All data stored locally in SQLite database
 - **Update Safe**: User data persists through app updates
+
+### Advanced Features
+- **Arrow Key Navigation**: Navigate home screen with arrow keys, press Enter to activate
+- **Keyboard Shortcuts**: Full keyboard navigation for productivity
+- **Export Functionality**: Export all entries to markdown format
+- **Habits Tracking**: 7x7 streak grid showing writing progress with daily streak counter
+- **Security Protection**: Optional passcode protection with secure encryption
+- **Comprehensive Settings**: Tabbed interface with 5 categories (Appearance, Habits, Templates, Security, General)
+- **Enhanced UI**: Maximized window startup, improved button sizing, settings cogwheel
+- **Robust Error Handling**: Graceful error recovery and comprehensive validation
 
 ## Installation
 
 ### macOS
 
 1. Download the appropriate file from the `release` folder:
-   - **Intel Macs**: `minimal-journal-1.1.0-x64.dmg`
-   - **Apple Silicon (M1/M2)**: `minimal-journal-1.1.0-arm64.dmg`
+   - **Intel Macs**: `minimal-journal-1.3.0-x64.dmg`
+   - **Apple Silicon (M1/M2)**: `minimal-journal-1.3.0-arm64.dmg`
 
 2. Open the DMG file and drag "Minimal Journal" to your Applications folder
 
@@ -36,7 +44,9 @@ A clean, minimalist journal app built with Electron and TypeScript. Perfect for 
 - **CMD+N**: Create new entry (from Home Screen)
 - **CMD+F**: Focus search bar (from Home Screen)
 - **CMD+,**: Open settings (from Home Screen)
-- **ESC**: Save as draft and go home (from Journal Screen) OR go back home (from View Screen) OR close modals
+- **Arrow Keys**: Navigate home screen elements (search, filter, settings, entries)
+- **Enter**: Activate selected element during arrow key navigation
+- **ESC**: Save as draft and go home (from Journal Screen) OR go back home (from View Screen) OR close modals OR deactivate navigation
 
 ### Writing & Editing
 - **CMD+S**: Save entry (from Journal Screen)
@@ -51,33 +61,30 @@ A clean, minimalist journal app built with Electron and TypeScript. Perfect for 
 
 ## Settings
 
-Access settings via the ⚙️ icon in the top-right corner or press **CMD+,** from the home screen.
+Access settings via the ⚙️ icon in the top-right corner or press **CMD+,** from the home screen. The settings interface features a tabbed layout with 5 categories:
 
-### Font Family Options
-- Courier New (Default)
-- Georgia
-- Times New Roman
-- Arial
-- Helvetica
-- SF Pro Text
-- Consolas
-- Fira Code
-- Comic Sans MS
+### Appearance Tab
+- **Font Family Options**: Choose from 9 different fonts including Courier New (default), Georgia, Times New Roman, Arial, Helvetica, SF Pro Text, Consolas, Fira Code, and Comic Sans MS
+- **Font Size**: Adjustable from 12px to 24px via slider with real-time preview
+- **Themes**: Switch between Dark Mode (default) and Light Mode with instant preview
 
-### Font Size
-- Adjustable from 12px to 24px via slider
-- Real-time preview as you adjust
-- Affects all text content proportionally
+### Habits Tab
+- **Writing Streak Grid**: 7x7 grid showing last 49 days of writing activity
+- **Streak Counter**: Large display of current consecutive writing days
+- **Daily Reminders**: Configurable notification settings with time and frequency options
 
-### Themes
-- **Dark Mode**: Minimalist dark theme (default)
-- **Light Mode**: Clean light theme
-- **Theme Toggle**: Quick switching with CMD+M
+### Templates Tab
+- **Entry Templates**: Placeholder for future template functionality
 
-### Export
-- Export all entries to markdown format
-- Preserves formatting and structure
-- Accessible from settings panel
+### Security Tab
+- **Password Protection**: Optional passcode protection for app access
+- **Secure Storage**: Passwords encrypted using industry-standard security
+- **Brute Force Protection**: Protection against password attacks with lockout periods
+- **Session Management**: Auto-lock after 30 minutes of inactivity
+
+### General Tab
+- **Data Export**: Export all entries to markdown format with preserved formatting
+- **Backup Options**: Direct access to export functionality
 
 ## Usage
 
@@ -164,8 +171,10 @@ node count-lines.js
 - **Database**: SQLite3 for local data storage
 - **Architecture**: Main process (Node.js) + Renderer process (Web)
 - **Styling**: CSS with CSS variables for theming and dynamic font sizing
-- **Security**: Context isolation enabled, node integration disabled
-- **Code Quality**: ~3,400 lines of code across 23 source files
+- **Security**: Context isolation enabled, node integration disabled, secure password storage with PBKDF2 and AES encryption
+- **Code Quality**: ~4,000 lines of code across 25+ source files
+- **Error Handling**: Comprehensive error boundaries and graceful recovery mechanisms
+- **Performance**: Memory leak prevention, efficient DOM manipulation, event listener cleanup
 
 ## Data Storage
 

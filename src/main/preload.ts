@@ -20,6 +20,22 @@ const electronAPI = {
   exportEntries: (): Promise<{ success: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('app:export-entries'),
 
+  // Security methods
+  isPasswordProtectionEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke('security:is-password-protection-enabled'),
+  
+  setPassword: (password: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('security:set-password', password),
+  
+  verifyPassword: (password: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('security:verify-password', password),
+  
+  disablePasswordProtection: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('security:disable-password-protection'),
+  
+  changePassword: (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('security:change-password', currentPassword, newPassword),
+
   onShortcut: (callback: (shortcut: string) => void) => {
     ipcRenderer.on('shortcut:new-entry', () => callback('new-entry'));
     ipcRenderer.on('shortcut:focus-search', () => callback('focus-search'));

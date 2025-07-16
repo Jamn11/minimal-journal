@@ -1,15 +1,19 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, safeStorage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { DatabaseManager } from './database';
 import { JournalEntry, SearchFilters } from '../shared/types';
+import * as crypto from 'crypto';
 
 class JournalApp {
   private mainWindow: BrowserWindow | null = null;
   private db: DatabaseManager;
+  private securityConfigPath: string;
 
   constructor() {
     this.db = new DatabaseManager();
+    const userDataPath = app.getPath('userData');
+    this.securityConfigPath = path.join(userDataPath, 'security.json');
   }
 
   async createWindow(): Promise<void> {
@@ -31,6 +35,7 @@ class JournalApp {
 
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow?.show();
+      this.mainWindow?.maximize();
     });
 
     this.mainWindow.on('closed', () => {
@@ -61,6 +66,27 @@ class JournalApp {
 
     ipcMain.handle('app:export-entries', async () => {
       return await this.exportEntries();
+    });
+
+    // Security-related IPC handlers
+    ipcMain.handle('security:is-password-protection-enabled', () => {
+      return this.isPasswordProtectionEnabled();
+    });
+
+    ipcMain.handle('security:set-password', async (_, password: string) => {
+      return await this.setPassword(password);
+    });
+
+    ipcMain.handle('security:verify-password', async (_, password: string) => {
+      return await this.verifyPassword(password);
+    });
+
+    ipcMain.handle('security:disable-password-protection', () => {
+      return this.disablePasswordProtection();
+    });
+
+    ipcMain.handle('security:change-password', async (_, currentPassword: string, newPassword: string) => {
+      return await this.changePassword(currentPassword, newPassword);
     });
   }
 
@@ -102,6 +128,129 @@ class JournalApp {
     });
   }
 
+  // Security Methods
+  private getSecurityConfig(): any {
+    try {
+      if (fs.existsSync(this.securityConfigPath)) {
+        const configData = fs.readFileSync(this.securityConfigPath, 'utf8');
+        return JSON.parse(configData);
+      }
+    } catch (error) {
+      console.error('Error reading security config:', error);
+    }
+    return {};
+  }
+
+  private saveSecurityConfig(config: any): void {
+    try {
+      fs.writeFileSync(this.securityConfigPath, JSON.stringify(config, null, 2), 'utf8');
+    } catch (error) {
+      console.error('Error saving security config:', error);
+      throw new Error('Failed to save security configuration');
+    }
+  }
+
+  private isPasswordProtectionEnabled(): boolean {
+    const config = this.getSecurityConfig();
+    return config.passwordProtectionEnabled === true;
+  }
+
+  private async setPassword(password: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Validate password
+      if (!password || password.length < 6) {
+        return { success: false, error: 'Password must be at least 6 characters long' };
+      }
+
+      // Generate a salt
+      const salt = crypto.randomBytes(32).toString('hex');
+      
+      // Hash the password with salt
+      const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+      
+      // Encrypt the hash using Electron's safeStorage
+      let encryptedHash: Buffer;
+      try {
+        encryptedHash = safeStorage.encryptString(hash);
+      } catch (error) {
+        return { success: false, error: 'Failed to encrypt password securely' };
+      }
+
+      // Save configuration
+      const config = {
+        passwordProtectionEnabled: true,
+        salt: salt,
+        encryptedHash: encryptedHash.toString('base64'),
+        createdAt: new Date().toISOString()
+      };
+
+      this.saveSecurityConfig(config);
+      return { success: true };
+    } catch (error) {
+      console.error('Error setting password:', error);
+      return { success: false, error: 'Failed to set password' };
+    }
+  }
+
+  private async verifyPassword(password: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const config = this.getSecurityConfig();
+      
+      if (!config.passwordProtectionEnabled || !config.salt || !config.encryptedHash) {
+        return { success: false, error: 'Password protection not properly configured' };
+      }
+
+      // Decrypt the stored hash
+      let storedHash: string;
+      try {
+        const encryptedBuffer = Buffer.from(config.encryptedHash, 'base64');
+        storedHash = safeStorage.decryptString(encryptedBuffer);
+      } catch (error) {
+        return { success: false, error: 'Failed to decrypt stored password' };
+      }
+
+      // Hash the provided password with the same salt
+      const inputHash = crypto.pbkdf2Sync(password, config.salt, 100000, 64, 'sha512').toString('hex');
+      
+      // Compare hashes
+      const isValid = inputHash === storedHash;
+      
+      return { success: isValid, error: isValid ? undefined : 'Invalid password' };
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      return { success: false, error: 'Failed to verify password' };
+    }
+  }
+
+  private disablePasswordProtection(): { success: boolean; error?: string } {
+    try {
+      const config = this.getSecurityConfig();
+      config.passwordProtectionEnabled = false;
+      // Keep the password data in case they want to re-enable
+      this.saveSecurityConfig(config);
+      return { success: true };
+    } catch (error) {
+      console.error('Error disabling password protection:', error);
+      return { success: false, error: 'Failed to disable password protection' };
+    }
+  }
+
+  private async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // First verify the current password
+      const verificationResult = await this.verifyPassword(currentPassword);
+      if (!verificationResult.success) {
+        return { success: false, error: 'Current password is incorrect' };
+      }
+
+      // Set the new password
+      return await this.setPassword(newPassword);
+    } catch (error) {
+      console.error('Error changing password:', error);
+      return { success: false, error: 'Failed to change password' };
+    }
+  }
+
   private async exportEntries(): Promise<{ success: boolean; path?: string; error?: string }> {
     try {
       const result = await dialog.showSaveDialog(this.mainWindow!, {
@@ -129,6 +278,16 @@ class JournalApp {
     }
   }
 
+  private escapeMarkdown(text: string): string {
+    // Escape potential HTML/script content for security
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+  }
+
   private generateMarkdownFromEntries(entries: JournalEntry[]): string {
     const sortedEntries = entries
       .filter(entry => !entry.draft)
@@ -143,14 +302,19 @@ class JournalApp {
       const formattedDate = date.toLocaleDateString();
       const formattedTime = date.toLocaleTimeString();
 
-      markdown += `## ${entry.title || 'Untitled'}\n\n`;
+      // Escape content for security
+      const safeTitle = this.escapeMarkdown(entry.title || 'Untitled');
+      const safeBody = this.escapeMarkdown(entry.body);
+      const safeTags = entry.tags.map(tag => `#${this.escapeMarkdown(tag)}`).join(', ');
+
+      markdown += `## ${safeTitle}\n\n`;
       markdown += `**Date:** ${formattedDate} ${formattedTime}\n\n`;
       
       if (entry.tags.length > 0) {
-        markdown += `**Tags:** ${entry.tags.map(tag => `#${tag}`).join(', ')}\n\n`;
+        markdown += `**Tags:** ${safeTags}\n\n`;
       }
 
-      markdown += `${entry.body}\n\n`;
+      markdown += `${safeBody}\n\n`;
       markdown += '---\n\n';
     }
 

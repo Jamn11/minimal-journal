@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #ffffff;
+        }
+        
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 5px;
+        }
+        
+        .search-bar {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #2a2a2a;
+            color: #ffffff;
+        }
+        
+        .filter-button, .settings-button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #2a2a2a;
+            color: #ffffff;
+            cursor: pointer;
+        }
+        
+        .entry-item {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #2a2a2a;
+            cursor: pointer;
+        }
+        
+        /* Navigation focus styling */
+        .nav-focused {
+            outline: 2px solid #4dabf7 !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 4px rgba(77, 171, 247, 0.2) !important;
+        }
+        
+        .nav-focused.entry-item {
+            background-color: #3a3a3a !important;
+            transform: scale(1.02);
+            transition: all 0.2s ease;
+        }
+        
+        .nav-focused.search-bar {
+            border-color: #4dab f7 !important;
+        }
+        
+        .nav-focused.filter-button,
+        .nav-focused.settings-button {
+            background-color: #4dab f7 !important;
+            color: white !important;
+            border-color: #4dab f7 !important;
+        }
+        
+        .log {
+            background: #000;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .status.success { background: #2d5a2d; }
+        .status.error { background: #5a2d2d; }
+        .status.warning { background: #5a4d2d; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Navigation Debug Test</h1>
+        
+        <div class="test-section">
+            <h2>Test Elements</h2>
+            <input type="text" id="search-input" placeholder="Search entries..." class="search-bar">
+            <button id="filter-button" class="filter-button">Filter</button>
+            <button id="settings-button" class="settings-button">Settings</button>
+            
+            <div id="entries-list">
+                <div class="entry-item" data-entry="1">Entry 1 - Sample journal entry</div>
+                <div class="entry-item" data-entry="2">Entry 2 - Another sample entry</div>
+                <div class="entry-item" data-entry="3">Entry 3 - Third sample entry</div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Navigation Status</h2>
+            <div id="status" class="status">Not initialized</div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Event Log</h2>
+            <div id="log" class="log"></div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>Manual Tests</h2>
+            <button onclick="testNavigation()">Test Navigation Init</button>
+            <button onclick="testArrowKey('up')">Test Arrow Up</button>
+            <button onclick="testArrowKey('down')">Test Arrow Down</button>
+            <button onclick="testCSSStyles()">Test CSS Styles</button>
+            <button onclick="testEventHandlers()">Test Event Handlers</button>
+        </div>
+    </div>
+
+    <script>
+        // Mock the basic structure needed for navigation
+        const mockUIManager = {
+            elements: {
+                searchInput: document.getElementById('search-input'),
+                filterButton: document.getElementById('filter-button'),
+                settingsButton: document.getElementById('settings-button'),
+                entriesList: document.getElementById('entries-list'),
+                homeScreen: { classList: { contains: () => true } }
+            }
+        };
+        
+        const mockEntryManager = {
+            getFilteredEntries: () => [
+                { id: 1, title: 'Entry 1' },
+                { id: 2, title: 'Entry 2' },
+                { id: 3, title: 'Entry 3' }
+            ]
+        };
+        
+        // Simple navigation manager for testing
+        class TestNavigationManager {
+            constructor(uiManager, entryManager) {
+                this.uiManager = uiManager;
+                this.entryManager = entryManager;
+                this.currentFocusIndex = -1;
+                this.navigationElements = [];
+                this.isNavigationActive = false;
+                this.onActivateCallback = null;
+            }
+            
+            initializeNavigation() {
+                log('Initializing navigation...');
+                
+                this.navigationElements = [
+                    {
+                        element: this.uiManager.elements.searchInput,
+                        type: 'search',
+                        activate: () => this.uiManager.elements.searchInput.focus()
+                    },
+                    {
+                        element: this.uiManager.elements.filterButton,
+                        type: 'button',
+                        activate: () => log('Filter button activated')
+                    },
+                    {
+                        element: this.uiManager.elements.settingsButton,
+                        type: 'button',
+                        activate: () => log('Settings button activated')
+                    }
+                ];
+                
+                // Add entry elements
+                const entryItems = this.uiManager.elements.entriesList.querySelectorAll('.entry-item');
+                entryItems.forEach((entryElement, index) => {
+                    this.navigationElements.push({
+                        element: entryElement,
+                        type: 'entry',
+                        entryIndex: index,
+                        activate: () => log(`Entry ${index + 1} activated`)
+                    });
+                });
+                
+                log(`Navigation initialized with ${this.navigationElements.length} elements`);
+                updateStatus(`Navigation initialized with ${this.navigationElements.length} elements`, 'success');
+                return true;
+            }
+            
+            handleArrowKey(direction) {
+                log(`Arrow key pressed: ${direction}`);
+                
+                if (!this.isNavigationActive) {
+                    log('Activating navigation');
+                    this.activateNavigation();
+                    return true;
+                }
+                
+                switch (direction) {
+                    case 'up':
+                        this.moveFocus(-1);
+                        break;
+                    case 'down':
+                        this.moveFocus(1);
+                        break;
+                    case 'left':
+                        this.moveFocus(-1);
+                        break;
+                    case 'right':
+                        this.moveFocus(1);
+                        break;
+                }
+                return true;
+            }
+            
+            activateNavigation() {
+                log('Activating navigation mode');
+                this.isNavigationActive = true;
+                this.currentFocusIndex = 0;
+                this.updateFocusVisual();
+                updateStatus('Navigation activated', 'success');
+            }
+            
+            moveFocus(direction) {
+                const newIndex = this.currentFocusIndex + direction;
+                
+                if (newIndex >= 0 && newIndex < this.navigationElements.length) {
+                    this.currentFocusIndex = newIndex;
+                    this.updateFocusVisual();
+                    log(`Focus moved to index ${newIndex}`);
+                } else {
+                    log(`Focus movement blocked - index ${newIndex} out of bounds`);
+                }
+            }
+            
+            updateFocusVisual() {
+                log(`Updating focus visual for index: ${this.currentFocusIndex}`);
+                
+                // Remove previous focus
+                this.removeFocusVisual();
+                
+                if (this.currentFocusIndex >= 0 && this.currentFocusIndex < this.navigationElements.length) {
+                    const currentElement = this.navigationElements[this.currentFocusIndex];
+                    
+                    if (currentElement && currentElement.element) {
+                        log(`Adding nav-focused class to: ${currentElement.type}`);
+                        currentElement.element.classList.add('nav-focused');
+                        
+                        // Check if the class was actually added
+                        if (currentElement.element.classList.contains('nav-focused')) {
+                            log('✓ nav-focused class successfully added');
+                            updateStatus(`Focus on ${currentElement.type} element`, 'success');
+                        } else {
+                            log('✗ nav-focused class failed to add');
+                            updateStatus('Failed to add focus class', 'error');
+                        }
+                    } else {
+                        log('✗ Current element or element.element is null');
+                        updateStatus('Element not found', 'error');
+                    }
+                } else {
+                    log(`✗ Focus index out of range: ${this.currentFocusIndex}`);
+                    updateStatus('Focus index out of range', 'error');
+                }
+            }
+            
+            removeFocusVisual() {
+                document.querySelectorAll('.nav-focused').forEach(el => {
+                    el.classList.remove('nav-focused');
+                });
+            }
+        }
+        
+        // Initialize test navigation
+        let testNav = new TestNavigationManager(mockUIManager, mockEntryManager);
+        
+        // Logging functions
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'warning') {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        // Test functions
+        function testNavigation() {
+            log('=== Testing Navigation Initialization ===');
+            try {
+                const result = testNav.initializeNavigation();
+                log(`Navigation init result: ${result}`);
+            } catch (error) {
+                log(`Navigation init error: ${error.message}`);
+                updateStatus(`Init error: ${error.message}`, 'error');
+            }
+        }
+        
+        function testArrowKey(direction) {
+            log(`=== Testing Arrow Key: ${direction} ===`);
+            try {
+                const result = testNav.handleArrowKey(direction);
+                log(`Arrow key result: ${result}`);
+            } catch (error) {
+                log(`Arrow key error: ${error.message}`);
+                updateStatus(`Arrow key error: ${error.message}`, 'error');
+            }
+        }
+        
+        function testCSSStyles() {
+            log('=== Testing CSS Styles ===');
+            
+            // Test if nav-focused class exists
+            const testElement = document.createElement('div');
+            testElement.classList.add('nav-focused');
+            document.body.appendChild(testElement);
+            
+            const styles = window.getComputedStyle(testElement);
+            log(`Outline: ${styles.outline}`);
+            log(`Outline-offset: ${styles.outlineOffset}`);
+            log(`Box-shadow: ${styles.boxShadow}`);
+            
+            if (styles.outline.includes('2px')) {
+                log('✓ CSS styles are working');
+                updateStatus('CSS styles working', 'success');
+            } else {
+                log('✗ CSS styles not working');
+                updateStatus('CSS styles not working', 'error');
+            }
+            
+            document.body.removeChild(testElement);
+        }
+        
+        function testEventHandlers() {
+            log('=== Testing Event Handlers ===');
+            
+            // Test keydown event
+            document.addEventListener('keydown', (e) => {
+                if (e.key.startsWith('Arrow')) {
+                    e.preventDefault();
+                    log(`Keydown event captured: ${e.key}`);
+                    const direction = e.key.replace('Arrow', '').toLowerCase();
+                    testArrowKey(direction);
+                }
+            });
+            
+            log('Event handlers set up. Try pressing arrow keys now.');
+            updateStatus('Event handlers active - try arrow keys', 'success');
+        }
+        
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            log('Page loaded. Ready for testing.');
+            updateStatus('Ready for testing', 'success');
+        });
+    </script>
+</body>
+</html>

@@ -123,8 +123,8 @@ body {
 }
 
 .settings-button {
-    padding: 12px 16px;
-    font-size: 16px;
+    padding: 12px 20px;
+    font-size: 20px;
     background-color: var(--bg-secondary);
 }
 
@@ -152,6 +152,7 @@ body {
 .entries-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     background-color: var(--bg-secondary);
@@ -162,6 +163,8 @@ body {
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
     transition: background-color 0.2s ease;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .entry-item:hover {
@@ -521,11 +524,16 @@ body {
     font-size: 12px;
     color: var(--text-secondary);
     text-align: center;
+    width: 224px; /* Match the streak-grid width */
 }
 
 .week-labels span {
     padding: 4px;
     font-weight: 500;
+    width: 28px; /* Match the streak-day width */
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .streak-grid {
@@ -968,6 +976,29 @@ body {
 .error-feedback {
     text-align: center;
     margin-top: 12px;
+}
+
+/* Navigation focus styling */
+.nav-focused {
+    outline: 2px solid var(--accent-color) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 4px rgba(77, 171, 247, 0.2) !important;
+}
+
+.nav-focused.entry-item {
+    background-color: var(--bg-tertiary) !important;
+    transition: all 0.2s ease;
+}
+
+.nav-focused.search-bar {
+    border-color: var(--accent-color) !important;
+}
+
+.nav-focused.filter-button,
+.nav-focused.settings-button {
+    background-color: var(--accent-color) !important;
+    color: white !important;
+    border-color: var(--accent-color) !important;
 }
 
 /* Scrollbar styling */

@@ -22,7 +22,7 @@ test.describe('Journal App', () => {
     await expect(page.locator('#home-screen')).toBeVisible();
     await expect(page.locator('#search-input')).toBeVisible();
     await expect(page.locator('#filter-button')).toBeVisible();
-    await expect(page.locator('#theme-toggle')).toBeVisible();
+    await expect(page.locator('#settings-button')).toBeVisible();
   });
 
   test('should create a new journal entry', async () => {
@@ -111,10 +111,22 @@ test.describe('Journal App', () => {
   test('should toggle theme', async () => {
     const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
     
-    await page.locator('#theme-toggle').click();
+    // Open settings modal and switch to appearance tab
+    await page.locator('#settings-button').click();
+    await expect(page.locator('#settings-modal')).toBeVisible();
+    
+    // Click the opposite theme button
+    if (initialTheme === 'dark') {
+      await page.locator('#light-theme').click();
+    } else {
+      await page.locator('#dark-theme').click();
+    }
     
     const newTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
     expect(newTheme).not.toBe(initialTheme);
+    
+    // Close settings modal
+    await page.locator('#close-settings').click();
   });
 
   test('should focus search with keyboard shortcut', async () => {

@@ -55,7 +55,48 @@ export class DatabaseManager {
     });
   }
 
+  private validateEntry(entry: Partial<JournalEntry>): void {
+    // Validate title length (max 10,000 characters)
+    if (entry.title && entry.title.length > 10000) {
+      throw new Error('Entry title cannot exceed 10,000 characters');
+    }
+    
+    // Validate body length (max 1MB characters)
+    if (entry.body && entry.body.length > 1000000) {
+      throw new Error('Entry body cannot exceed 1,000,000 characters');
+    }
+    
+    // Validate that title and body don't contain null bytes or other control characters
+    if (entry.title && (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(entry.title))) {
+      throw new Error('Entry title contains invalid characters');
+    }
+    
+    if (entry.body && (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(entry.body))) {
+      throw new Error('Entry body contains invalid characters');
+    }
+    
+    // Validate entry structure
+    if (entry.title && typeof entry.title !== 'string') {
+      throw new Error('Entry title must be a string');
+    }
+    
+    if (entry.body && typeof entry.body !== 'string') {
+      throw new Error('Entry body must be a string');
+    }
+    
+    if (entry.id && typeof entry.id !== 'string') {
+      throw new Error('Entry ID must be a string');
+    }
+    
+    if (entry.draft !== undefined && typeof entry.draft !== 'boolean') {
+      throw new Error('Entry draft flag must be a boolean');
+    }
+  }
+
   async saveEntry(entry: Partial<JournalEntry>): Promise<JournalEntry> {
+    // Validate entry data before processing
+    this.validateEntry(entry);
+    
     const id = entry.id || uuidv4();
     const timestamp = entry.timestamp || new Date().toISOString();
     const lastModified = entry.lastModified;
@@ -114,8 +155,74 @@ export class DatabaseManager {
     });
   }
 
+  private validateSearchFilters(filters: SearchFilters): void {
+    // Validate query length and content
+    if (filters.query !== undefined) {
+      if (typeof filters.query !== 'string') {
+        throw new Error('Search query must be a string');
+      }
+      if (filters.query.length > 1000) {
+        throw new Error('Search query too long');
+      }
+      // Check for potential SQL injection attempts
+      if (/[';\\]/.test(filters.query)) {
+        throw new Error('Search query contains invalid characters');
+      }
+    }
+    
+    // Validate tags
+    if (filters.tags !== undefined) {
+      if (!Array.isArray(filters.tags)) {
+        throw new Error('Tags filter must be an array');
+      }
+      if (filters.tags.length > 50) {
+        throw new Error('Too many tags in filter');
+      }
+      filters.tags.forEach(tag => {
+        if (typeof tag !== 'string') {
+          throw new Error('All tags must be strings');
+        }
+        if (tag.length > 50) {
+          throw new Error('Tag too long');
+        }
+        if (/[';\\]/.test(tag)) {
+          throw new Error('Tag contains invalid characters');
+        }
+      });
+    }
+    
+    // Validate date filters
+    if (filters.dateFrom !== undefined) {
+      if (typeof filters.dateFrom !== 'string') {
+        throw new Error('Date from must be a string');
+      }
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(filters.dateFrom)) {
+        throw new Error('Date from must be in ISO format');
+      }
+    }
+    
+    if (filters.dateTo !== undefined) {
+      if (typeof filters.dateTo !== 'string') {
+        throw new Error('Date to must be a string');
+      }
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(filters.dateTo)) {
+        throw new Error('Date to must be in ISO format');
+      }
+    }
+  }
+
   async getAllEntries(filters?: SearchFilters): Promise<JournalEntry[]> {
     return new Promise((resolve, reject) => {
+      // Validate filters before processing
+      if (filters) {
+        try {
+          this.validateSearchFilters(filters);
+        } catch (error) {
+          reject(error);
+          return;
+        }
+      }
+      
       let sql = 'SELECT * FROM entries';
       const params: any[] = [];
       const conditions: string[] = [];
@@ -186,13 +293,16 @@ export class DatabaseManager {
   }
 
   private extractTags(text: string): string[] {
-    const tagRegex = /#([a-zA-Z0-9_-]+)/g;
+    // Improved regex that handles Unicode characters and common punctuation
+    // \p{L} matches letters in any language, \p{N} matches numbers
+    const tagRegex = /#([\p{L}\p{N}_-]+)/gu;
     const tags: string[] = [];
     let match;
     
     while ((match = tagRegex.exec(text)) !== null) {
       const tag = match[1];
-      if (!tags.includes(tag)) {
+      // Additional validation: tags should be reasonable length (1-50 chars)
+      if (tag.length >= 1 && tag.length <= 50 && !tags.includes(tag)) {
         tags.push(tag);
       }
     }
