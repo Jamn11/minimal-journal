@@ -18,6 +18,11 @@ type StoredEntry = {
   draft: boolean;
 };
 
+type SecurityResult = {
+  success: boolean;
+  error?: string;
+};
+
 let electronApp: ElectronApplication;
 let page: Page;
 let testUserDataDir: string;
@@ -39,9 +44,17 @@ async function clearAllEntries(): Promise<void> {
   );
 }
 
+async function disablePasswordProtectionIfEnabled(): Promise<void> {
+  const isEnabled = await page.evaluate(() => window.electronAPI.isPasswordProtectionEnabled());
+  if (isEnabled) {
+    await page.evaluate(() => window.electronAPI.disablePasswordProtection());
+  }
+}
+
 async function resetToCleanHomeScreen(): Promise<void> {
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#home-screen')).toBeVisible();
+  await disablePasswordProtectionIfEnabled();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await clearAllEntries();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#home-screen')).toBeVisible();
@@ -240,5 +253,59 @@ test.describe('Journal App', () => {
     await expect(page.locator('#journal-screen')).toBeVisible();
     await page.locator('#body-textarea').fill('One two three four five');
     await expect(page.locator('#word-count')).toContainText('5 words');
+  });
+
+  test('should support passcode set, verify, and disable lifecycle', async () => {
+    const setResult = await page.evaluate(() =>
+      window.electronAPI.setPassword('Secure123')
+    ) as SecurityResult;
+    expect(setResult.success).toBe(true);
+
+    const enabled = await page.evaluate(() =>
+      window.electronAPI.isPasswordProtectionEnabled()
+    );
+    expect(enabled).toBe(true);
+
+    const validResult = await page.evaluate(() =>
+      window.electronAPI.verifyPassword('Secure123')
+    ) as SecurityResult;
+    expect(validResult.success).toBe(true);
+
+    const invalidResult = await page.evaluate(() =>
+      window.electronAPI.verifyPassword('WrongPassword')
+    ) as SecurityResult;
+    expect(invalidResult.success).toBe(false);
+
+    const disableResult = await page.evaluate(() =>
+      window.electronAPI.disablePasswordProtection()
+    ) as SecurityResult;
+    expect(disableResult.success).toBe(true);
+  });
+
+  test('should reject invalid passcode in unlock modal and unlock with valid passcode', async () => {
+    const setResult = await page.evaluate(() =>
+      window.electronAPI.setPassword('Lock1234')
+    ) as SecurityResult;
+    expect(setResult.success).toBe(true);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    const passwordModal = page.locator('#password-entry-modal');
+    const passwordInput = page.locator('#password-entry-input');
+    const submitButton = page.locator('#password-entry-submit');
+    const errorMessage = page.locator('#password-entry-error');
+
+    await expect(passwordModal).toHaveClass(/active/);
+
+    await passwordInput.fill('wrong-passcode');
+    await submitButton.click();
+    await expect(errorMessage).toContainText('Incorrect passcode');
+    await expect(passwordModal).toHaveClass(/active/);
+
+    await passwordInput.fill('Lock1234');
+    await submitButton.click();
+    await expect(passwordModal).not.toHaveClass(/active/);
+
+    await page.evaluate(() => window.electronAPI.disablePasswordProtection());
   });
 });

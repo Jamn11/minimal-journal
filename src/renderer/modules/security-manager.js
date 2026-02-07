@@ -222,7 +222,12 @@ class SecurityManager {
       return { success: true };
     } else {
       this.handleFailedPasswordAttempt();
-      this.uiManager.showFeedback('password-entry-error', 'Incorrect passcode. Please try again.', 'error');
+      if (this.isLockedOut()) {
+        const remainingTime = Math.max(1, Math.ceil((this.lockoutEndTime - Date.now()) / 1000));
+        this.uiManager.showFeedback('password-entry-error', `Too many failed attempts. Try again in ${remainingTime} seconds.`, 'error');
+      } else {
+        this.uiManager.showFeedback('password-entry-error', 'Incorrect passcode. Please try again.', 'error');
+      }
       this.uiManager.elements.passwordEntryInput.value = '';
       this.uiManager.elements.passwordEntryInput.focus();
       return { success: false };
@@ -292,7 +297,7 @@ class SecurityManager {
 
   // Brute force protection methods
   isLockedOut() {
-    return this.lockoutEndTime && Date.now() < this.lockoutEndTime;
+    return typeof this.lockoutEndTime === 'number' && Date.now() < this.lockoutEndTime;
   }
 
   handleFailedPasswordAttempt() {
