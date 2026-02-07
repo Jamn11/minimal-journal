@@ -1,1 +1,0 @@
-Read all of the documents in planning in order to familiarize yourself with the project and the user's expectations. Also be sure to review your CLAUDE.md file and make any necessary changes. Do not edit the code. 

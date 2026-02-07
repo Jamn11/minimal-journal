@@ -11,7 +11,7 @@ export class DatabaseManager {
   private dbPath: string;
 
   constructor() {
-    const userDataPath = app.getPath('userData');
+    const userDataPath = process.env.MINIMAL_JOURNAL_USER_DATA_DIR || app.getPath('userData');
     this.dbPath = path.join(userDataPath, 'journal.db');
   }
 
@@ -46,8 +46,12 @@ export class DatabaseManager {
           reject(err);
         } else {
           // Add lastModified column if it doesn't exist (for existing databases)
-          this.db.run('ALTER TABLE entries ADD COLUMN lastModified TEXT', (alterErr) => {
-            // Ignore error if column already exists
+          this.db.run('ALTER TABLE entries ADD COLUMN lastModified TEXT', (alterErr: any) => {
+            // Ignore "column already exists" for previously migrated databases.
+            if (alterErr && !/duplicate column name/i.test(alterErr.message || '')) {
+              reject(alterErr);
+              return;
+            }
             resolve();
           });
         }
@@ -56,40 +60,59 @@ export class DatabaseManager {
   }
 
   private validateEntry(entry: Partial<JournalEntry>): void {
-    // Validate title length (max 10,000 characters)
-    if (entry.title && entry.title.length > 10000) {
-      throw new Error('Entry title cannot exceed 10,000 characters');
-    }
-    
-    // Validate body length (max 1MB characters)
-    if (entry.body && entry.body.length > 1000000) {
-      throw new Error('Entry body cannot exceed 1,000,000 characters');
-    }
-    
-    // Validate that title and body don't contain null bytes or other control characters
-    if (entry.title && (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(entry.title))) {
-      throw new Error('Entry title contains invalid characters');
-    }
-    
-    if (entry.body && (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(entry.body))) {
-      throw new Error('Entry body contains invalid characters');
-    }
-    
-    // Validate entry structure
-    if (entry.title && typeof entry.title !== 'string') {
+    if (entry.title !== undefined && typeof entry.title !== 'string') {
       throw new Error('Entry title must be a string');
     }
-    
-    if (entry.body && typeof entry.body !== 'string') {
+
+    if (entry.body !== undefined && typeof entry.body !== 'string') {
       throw new Error('Entry body must be a string');
     }
-    
-    if (entry.id && typeof entry.id !== 'string') {
+
+    if (entry.id !== undefined && typeof entry.id !== 'string') {
       throw new Error('Entry ID must be a string');
     }
-    
+
     if (entry.draft !== undefined && typeof entry.draft !== 'boolean') {
       throw new Error('Entry draft flag must be a boolean');
+    }
+
+    if (entry.timestamp !== undefined) {
+      if (typeof entry.timestamp !== 'string') {
+        throw new Error('Entry timestamp must be a string');
+      }
+      const parsedTimestamp = new Date(entry.timestamp);
+      if (Number.isNaN(parsedTimestamp.getTime())) {
+        throw new Error('Entry timestamp must be a valid date string');
+      }
+    }
+
+    if (entry.lastModified !== undefined) {
+      if (typeof entry.lastModified !== 'string') {
+        throw new Error('Entry lastModified must be a string');
+      }
+      const parsedLastModified = new Date(entry.lastModified);
+      if (Number.isNaN(parsedLastModified.getTime())) {
+        throw new Error('Entry lastModified must be a valid date string');
+      }
+    }
+
+    // Validate title length (max 10,000 characters)
+    if (typeof entry.title === 'string' && entry.title.length > 10000) {
+      throw new Error('Entry title cannot exceed 10,000 characters');
+    }
+
+    // Validate body length (max 1MB characters)
+    if (typeof entry.body === 'string' && entry.body.length > 1000000) {
+      throw new Error('Entry body cannot exceed 1,000,000 characters');
+    }
+
+    // Validate that title/body don't contain control characters
+    if (typeof entry.title === 'string' && (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(entry.title))) {
+      throw new Error('Entry title contains invalid characters');
+    }
+
+    if (typeof entry.body === 'string' && (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(entry.body))) {
+      throw new Error('Entry body contains invalid characters');
     }
   }
 
@@ -155,7 +178,34 @@ export class DatabaseManager {
     });
   }
 
-  private validateSearchFilters(filters: SearchFilters): void {
+  private normalizeDateFilter(dateValue: string, boundary: 'from' | 'to'): string {
+    const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (dateOnlyPattern.test(dateValue)) {
+      const boundaryDate = new Date(
+        boundary === 'to'
+          ? `${dateValue}T23:59:59.999Z`
+          : `${dateValue}T00:00:00.000Z`
+      );
+
+      if (Number.isNaN(boundaryDate.getTime())) {
+        throw new Error(`Invalid ${boundary === 'from' ? 'date from' : 'date to'} value`);
+      }
+
+      return boundaryDate.toISOString();
+    }
+
+    const parsedDate = new Date(dateValue);
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new Error(`Invalid ${boundary === 'from' ? 'date from' : 'date to'} value`);
+    }
+
+    return parsedDate.toISOString();
+  }
+
+  private validateAndNormalizeSearchFilters(filters: SearchFilters): SearchFilters {
+    const normalized: SearchFilters = {};
+
     // Validate query length and content
     if (filters.query !== undefined) {
       if (typeof filters.query !== 'string') {
@@ -164,12 +214,12 @@ export class DatabaseManager {
       if (filters.query.length > 1000) {
         throw new Error('Search query too long');
       }
-      // Check for potential SQL injection attempts
-      if (/[';\\]/.test(filters.query)) {
-        throw new Error('Search query contains invalid characters');
+      if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(filters.query)) {
+        throw new Error('Search query contains control characters');
       }
+      normalized.query = filters.query;
     }
-    
+
     // Validate tags
     if (filters.tags !== undefined) {
       if (!Array.isArray(filters.tags)) {
@@ -185,38 +235,47 @@ export class DatabaseManager {
         if (tag.length > 50) {
           throw new Error('Tag too long');
         }
-        if (/[';\\]/.test(tag)) {
-          throw new Error('Tag contains invalid characters');
+        if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(tag)) {
+          throw new Error('Tag contains control characters');
         }
       });
+      normalized.tags = filters.tags;
     }
-    
+
     // Validate date filters
     if (filters.dateFrom !== undefined) {
       if (typeof filters.dateFrom !== 'string') {
         throw new Error('Date from must be a string');
       }
-      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(filters.dateFrom)) {
-        throw new Error('Date from must be in ISO format');
-      }
+      normalized.dateFrom = this.normalizeDateFilter(filters.dateFrom, 'from');
     }
-    
+
     if (filters.dateTo !== undefined) {
       if (typeof filters.dateTo !== 'string') {
         throw new Error('Date to must be a string');
       }
-      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(filters.dateTo)) {
-        throw new Error('Date to must be in ISO format');
+      normalized.dateTo = this.normalizeDateFilter(filters.dateTo, 'to');
+    }
+
+    if (normalized.dateFrom && normalized.dateTo) {
+      const fromDate = new Date(normalized.dateFrom);
+      const toDate = new Date(normalized.dateTo);
+      if (fromDate.getTime() > toDate.getTime()) {
+        throw new Error('Date from must be before or equal to date to');
       }
     }
+
+    return normalized;
   }
 
   async getAllEntries(filters?: SearchFilters): Promise<JournalEntry[]> {
     return new Promise((resolve, reject) => {
+      let normalizedFilters: SearchFilters | undefined;
+
       // Validate filters before processing
       if (filters) {
         try {
-          this.validateSearchFilters(filters);
+          normalizedFilters = this.validateAndNormalizeSearchFilters(filters);
         } catch (error) {
           reject(error);
           return;
@@ -227,28 +286,28 @@ export class DatabaseManager {
       const params: any[] = [];
       const conditions: string[] = [];
 
-      if (filters?.query) {
+      if (normalizedFilters?.query) {
         conditions.push('(title LIKE ? OR body LIKE ?)');
-        const searchTerm = `%${filters.query}%`;
+        const searchTerm = `%${normalizedFilters.query}%`;
         params.push(searchTerm, searchTerm);
       }
 
-      if (filters?.tags && filters.tags.length > 0) {
-        const tagConditions = filters.tags.map(() => 'tags LIKE ?').join(' OR ');
+      if (normalizedFilters?.tags && normalizedFilters.tags.length > 0) {
+        const tagConditions = normalizedFilters.tags.map(() => 'tags LIKE ?').join(' OR ');
         conditions.push(`(${tagConditions})`);
-        filters.tags.forEach(tag => {
+        normalizedFilters.tags.forEach(tag => {
           params.push(`%"${tag}"%`);
         });
       }
 
-      if (filters?.dateFrom) {
+      if (normalizedFilters?.dateFrom) {
         conditions.push('timestamp >= ?');
-        params.push(filters.dateFrom);
+        params.push(normalizedFilters.dateFrom);
       }
 
-      if (filters?.dateTo) {
+      if (normalizedFilters?.dateTo) {
         conditions.push('timestamp <= ?');
-        params.push(filters.dateTo);
+        params.push(normalizedFilters.dateTo);
       }
 
       if (conditions.length > 0) {
@@ -281,13 +340,23 @@ export class DatabaseManager {
   }
 
   private rowToEntry(row: any): JournalEntry {
+    let parsedTags: string[] = [];
+    try {
+      const tagsValue = JSON.parse(row.tags);
+      if (Array.isArray(tagsValue)) {
+        parsedTags = tagsValue.filter(tag => typeof tag === 'string');
+      }
+    } catch {
+      parsedTags = [];
+    }
+
     return {
       id: row.id,
       title: row.title,
       body: row.body,
       timestamp: row.timestamp,
       lastModified: row.lastModified || undefined,
-      tags: JSON.parse(row.tags),
+      tags: parsedTags,
       draft: row.draft === 1
     };
   }

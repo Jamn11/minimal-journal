@@ -85,7 +85,12 @@ class UIManager {
   }
 
   showError(message) {
-    this.elements.entriesList.innerHTML = `<div class="empty-state" style="color: red;">${message}</div>`;
+    const errorElement = document.createElement('div');
+    errorElement.className = 'empty-state';
+    errorElement.style.color = 'red';
+    errorElement.textContent = message;
+    this.elements.entriesList.innerHTML = '';
+    this.elements.entriesList.appendChild(errorElement);
   }
 
   showFeedback(elementId, message, type) {

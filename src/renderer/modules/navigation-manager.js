@@ -12,12 +12,6 @@ class NavigationManager {
 
   // Initialize navigation elements in order
   initializeNavigation() {
-    console.log('Initializing navigation...');
-    console.log('UIManager elements:', this.uiManager.elements);
-    
-    console.log('Search input element:', this.uiManager.elements.searchInput);
-    console.log('Filter button element:', this.uiManager.elements.filterButton);
-    console.log('Settings button element:', this.uiManager.elements.settingsButton);
     
     this.navigationElements = [
       {
@@ -37,12 +31,8 @@ class NavigationManager {
       }
     ];
 
-    console.log('Basic navigation elements added:', this.navigationElements.length);
-
     // Add entry elements
     this.refreshEntryElements();
-    
-    console.log('Navigation initialized with', this.navigationElements.length, 'elements');
     
     // Restore saved focus if we have one
     this.restoreSavedFocus();
@@ -52,33 +42,27 @@ class NavigationManager {
   saveFocusBeforeLeaving() {
     if (this.isNavigationActive && this.currentFocusIndex >= 0) {
       this.savedFocusIndex = this.currentFocusIndex;
-      console.log('Saved focus index before leaving:', this.savedFocusIndex);
     }
   }
 
   // Restore previously saved focus when returning to home screen
   restoreSavedFocus() {
     if (this.savedFocusIndex >= 0 && this.savedFocusIndex < this.navigationElements.length) {
-      console.log('Restoring saved focus index:', this.savedFocusIndex);
       this.isNavigationActive = true;
       this.currentFocusIndex = this.savedFocusIndex;
       this.updateFocusVisual();
       // Don't clear the saved index yet - in case user switches screens again
-    } else {
-      console.log('No valid saved focus index to restore');
     }
   }
 
   // Refresh the entry elements when entries are updated
   refreshEntryElements() {
-    console.log('Refreshing entry elements...');
     
     // Remove existing entry elements
     this.navigationElements = this.navigationElements.filter(item => item.type !== 'entry');
     
     // Add current entry elements
     const entryItems = this.uiManager.elements.entriesList.querySelectorAll('.entry-item');
-    console.log('Found entry items:', entryItems.length);
     
     entryItems.forEach((entryElement, index) => {
       this.navigationElements.push({
@@ -104,8 +88,6 @@ class NavigationManager {
         }
       });
     });
-    
-    console.log('Total navigation elements after refresh:', this.navigationElements.length);
   }
 
   // Set callback for when navigation activates something that changes screens
@@ -115,21 +97,14 @@ class NavigationManager {
 
   // Handle arrow key navigation
   handleArrowKey(direction) {
-    console.log('handleArrowKey called with direction:', direction);
     
     // Only handle navigation on home screen
     if (!this.isOnHomeScreen()) {
-      console.log('Not on home screen, ignoring arrow key');
       return false;
     }
 
-    console.log('Navigation elements count:', this.navigationElements.length);
-    console.log('Current focus index:', this.currentFocusIndex);
-    console.log('Navigation active:', this.isNavigationActive);
-
     // If navigation isn't active, activate it
     if (!this.isNavigationActive) {
-      console.log('Activating navigation');
       this.activateNavigation();
       return true;
     }
@@ -178,10 +153,8 @@ class NavigationManager {
 
   // Activate navigation mode
   activateNavigation() {
-    console.log('Activating navigation mode');
     this.isNavigationActive = true;
     this.currentFocusIndex = 0;
-    console.log('Set focus index to 0, updating visual');
     this.updateFocusVisual();
   }
 
@@ -212,7 +185,6 @@ class NavigationManager {
       const firstEntryIndex = this.navigationElements.findIndex(item => item.type === 'entry');
       
       if (firstEntryIndex !== -1) {
-        console.log(`Jumping from ${currentElement.type} to first entry at index ${firstEntryIndex}`);
         this.currentFocusIndex = firstEntryIndex;
         this.updateFocusVisual();
         return;
@@ -225,17 +197,13 @@ class NavigationManager {
 
   // Update visual focus indicator
   updateFocusVisual() {
-    console.log('Updating focus visual for index:', this.currentFocusIndex);
-    
     // Remove previous focus
     this.removeFocusVisual();
     
     if (this.currentFocusIndex >= 0 && this.currentFocusIndex < this.navigationElements.length) {
       const currentElement = this.navigationElements[this.currentFocusIndex];
-      console.log('Current element:', currentElement);
       
       if (currentElement && currentElement.element) {
-        console.log('Adding nav-focused class to:', currentElement.element);
         currentElement.element.classList.add('nav-focused');
         
         // Ensure the element is visible
@@ -243,11 +211,7 @@ class NavigationManager {
           behavior: 'smooth',
           block: 'nearest'
         });
-      } else {
-        console.log('Current element or element.element is null');
       }
-    } else {
-      console.log('Focus index out of range:', this.currentFocusIndex, 'of', this.navigationElements.length);
     }
   }
 
@@ -288,7 +252,6 @@ class NavigationManager {
     // Also validate saved focus index when entries change
     if (this.savedFocusIndex >= this.navigationElements.length) {
       this.savedFocusIndex = Math.max(0, this.navigationElements.length - 1);
-      console.log('Adjusted saved focus index to:', this.savedFocusIndex);
     }
   }
 }

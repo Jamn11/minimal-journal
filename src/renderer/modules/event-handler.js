@@ -172,28 +172,22 @@ class EventHandler {
 
       // Arrow key navigation on home screen
       if (this.appState.currentScreen === 'home' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        console.log('Arrow key detected on home screen:', e.key);
         if (e.key === 'ArrowUp') {
           e.preventDefault();
-          console.log('Calling handleArrowKey with up');
           this.navigationManager.handleArrowKey('up');
         } else if (e.key === 'ArrowDown') {
           e.preventDefault();
-          console.log('Calling handleArrowKey with down');
           this.navigationManager.handleArrowKey('down');
         } else if (e.key === 'ArrowLeft') {
           e.preventDefault();
-          console.log('Calling handleArrowKey with left');
           this.navigationManager.handleArrowKey('left');
         } else if (e.key === 'ArrowRight') {
           e.preventDefault();
-          console.log('Calling handleArrowKey with right');
           this.navigationManager.handleArrowKey('right');
         } else if (e.key === 'Enter') {
           // Only handle Enter for navigation if no input element is focused
           if (!this.isInputFocused()) {
             e.preventDefault();
-            console.log('Calling handleEnterKey');
             this.navigationManager.handleEnterKey();
           }
         }

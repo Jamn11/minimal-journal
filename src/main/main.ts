@@ -12,7 +12,7 @@ class JournalApp {
 
   constructor() {
     this.db = new DatabaseManager();
-    const userDataPath = app.getPath('userData');
+    const userDataPath = process.env.MINIMAL_JOURNAL_USER_DATA_DIR || app.getPath('userData');
     this.securityConfigPath = path.join(userDataPath, 'security.json');
   }
 
@@ -31,6 +31,16 @@ class JournalApp {
       show: false,
     });
 
+    // Prevent renderer-created windows/popups.
+    this.mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    // Restrict navigation to local file content only.
+    this.mainWindow.webContents.on('will-navigate', (event, url) => {
+      if (!url.startsWith('file://')) {
+        event.preventDefault();
+      }
+    });
+
     await this.mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
     this.mainWindow.once('ready-to-show', () => {
@@ -44,20 +54,20 @@ class JournalApp {
   }
 
   setupIpcHandlers(): void {
-    ipcMain.handle('db:save-entry', async (_, entry: Partial<JournalEntry>) => {
-      return await this.db.saveEntry(entry);
+    ipcMain.handle('db:save-entry', async (_, entry: unknown) => {
+      return await this.db.saveEntry(this.sanitizeEntryPayload(entry));
     });
 
-    ipcMain.handle('db:get-entry', async (_, id: string) => {
-      return await this.db.getEntry(id);
+    ipcMain.handle('db:get-entry', async (_, id: unknown) => {
+      return await this.db.getEntry(this.validateEntryId(id));
     });
 
-    ipcMain.handle('db:get-all-entries', async (_, filters?: SearchFilters) => {
-      return await this.db.getAllEntries(filters);
+    ipcMain.handle('db:get-all-entries', async (_, filters?: unknown) => {
+      return await this.db.getAllEntries(this.sanitizeSearchFilters(filters));
     });
 
-    ipcMain.handle('db:delete-entry', async (_, id: string) => {
-      return await this.db.deleteEntry(id);
+    ipcMain.handle('db:delete-entry', async (_, id: unknown) => {
+      return await this.db.deleteEntry(this.validateEntryId(id));
     });
 
     ipcMain.handle('app:get-platform', () => {
@@ -73,11 +83,17 @@ class JournalApp {
       return this.isPasswordProtectionEnabled();
     });
 
-    ipcMain.handle('security:set-password', async (_, password: string) => {
+    ipcMain.handle('security:set-password', async (_, password: unknown) => {
+      if (typeof password !== 'string') {
+        return { success: false, error: 'Password must be a string' };
+      }
       return await this.setPassword(password);
     });
 
-    ipcMain.handle('security:verify-password', async (_, password: string) => {
+    ipcMain.handle('security:verify-password', async (_, password: unknown) => {
+      if (typeof password !== 'string') {
+        return { success: false, error: 'Password must be a string' };
+      }
       return await this.verifyPassword(password);
     });
 
@@ -85,7 +101,10 @@ class JournalApp {
       return this.disablePasswordProtection();
     });
 
-    ipcMain.handle('security:change-password', async (_, currentPassword: string, newPassword: string) => {
+    ipcMain.handle('security:change-password', async (_, currentPassword: unknown, newPassword: unknown) => {
+      if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+        return { success: false, error: 'Passwords must be strings' };
+      }
       return await this.changePassword(currentPassword, newPassword);
     });
   }
@@ -128,12 +147,112 @@ class JournalApp {
     });
   }
 
+  private validateEntryId(id: unknown): string {
+    if (typeof id !== 'string') {
+      throw new Error('Entry ID must be a string');
+    }
+
+    if (!/^[a-zA-Z0-9-]{1,128}$/.test(id)) {
+      throw new Error('Entry ID has invalid format');
+    }
+
+    return id;
+  }
+
+  private sanitizeEntryPayload(entry: unknown): Partial<JournalEntry> {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error('Entry payload must be an object');
+    }
+
+    const payload = entry as Record<string, unknown>;
+    const allowedKeys = new Set(['id', 'title', 'body', 'timestamp', 'lastModified', 'draft']);
+    const sanitized: Partial<JournalEntry> = {};
+
+    for (const key of Object.keys(payload)) {
+      if (!allowedKeys.has(key)) {
+        continue;
+      }
+
+      const value = payload[key];
+      switch (key) {
+        case 'id':
+          sanitized.id = this.validateEntryId(value);
+          break;
+        case 'title':
+          if (typeof value !== 'string') throw new Error('Entry title must be a string');
+          sanitized.title = value;
+          break;
+        case 'body':
+          if (typeof value !== 'string') throw new Error('Entry body must be a string');
+          sanitized.body = value;
+          break;
+        case 'timestamp':
+          if (typeof value !== 'string') throw new Error('Entry timestamp must be a string');
+          sanitized.timestamp = value;
+          break;
+        case 'lastModified':
+          if (typeof value !== 'string') throw new Error('Entry lastModified must be a string');
+          sanitized.lastModified = value;
+          break;
+        case 'draft':
+          if (typeof value !== 'boolean') throw new Error('Entry draft flag must be a boolean');
+          sanitized.draft = value;
+          break;
+        default:
+          break;
+      }
+    }
+
+    return sanitized;
+  }
+
+  private sanitizeSearchFilters(filters: unknown): SearchFilters | undefined {
+    if (filters === undefined || filters === null) {
+      return undefined;
+    }
+
+    if (typeof filters !== 'object' || Array.isArray(filters)) {
+      throw new Error('Search filters must be an object');
+    }
+
+    const payload = filters as Record<string, unknown>;
+    const sanitized: SearchFilters = {};
+
+    if (payload.query !== undefined) {
+      if (typeof payload.query !== 'string') throw new Error('Search query must be a string');
+      sanitized.query = payload.query;
+    }
+
+    if (payload.tags !== undefined) {
+      if (!Array.isArray(payload.tags) || payload.tags.some(tag => typeof tag !== 'string')) {
+        throw new Error('Tags filter must be an array of strings');
+      }
+      sanitized.tags = payload.tags;
+    }
+
+    if (payload.dateFrom !== undefined) {
+      if (typeof payload.dateFrom !== 'string') throw new Error('Date from must be a string');
+      sanitized.dateFrom = payload.dateFrom;
+    }
+
+    if (payload.dateTo !== undefined) {
+      if (typeof payload.dateTo !== 'string') throw new Error('Date to must be a string');
+      sanitized.dateTo = payload.dateTo;
+    }
+
+    return sanitized;
+  }
+
   // Security Methods
   private getSecurityConfig(): any {
     try {
       if (fs.existsSync(this.securityConfigPath)) {
         const configData = fs.readFileSync(this.securityConfigPath, 'utf8');
-        return JSON.parse(configData);
+        const parsed = JSON.parse(configData);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
+        return {};
       }
     } catch (error) {
       console.error('Error reading security config:', error);
@@ -143,7 +262,11 @@ class JournalApp {
 
   private saveSecurityConfig(config: any): void {
     try {
-      fs.writeFileSync(this.securityConfigPath, JSON.stringify(config, null, 2), 'utf8');
+      fs.mkdirSync(path.dirname(this.securityConfigPath), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(this.securityConfigPath, JSON.stringify(config, null, 2), {
+        encoding: 'utf8',
+        mode: 0o600
+      });
     } catch (error) {
       console.error('Error saving security config:', error);
       throw new Error('Failed to save security configuration');
@@ -171,6 +294,9 @@ class JournalApp {
       // Encrypt the hash using Electron's safeStorage
       let encryptedHash: Buffer;
       try {
+        if (!safeStorage.isEncryptionAvailable()) {
+          return { success: false, error: 'Secure encryption is not available on this system' };
+        }
         encryptedHash = safeStorage.encryptString(hash);
       } catch (error) {
         return { success: false, error: 'Failed to encrypt password securely' };
@@ -203,6 +329,9 @@ class JournalApp {
       // Decrypt the stored hash
       let storedHash: string;
       try {
+        if (!safeStorage.isEncryptionAvailable()) {
+          return { success: false, error: 'Secure decryption is not available on this system' };
+        }
         const encryptedBuffer = Buffer.from(config.encryptedHash, 'base64');
         storedHash = safeStorage.decryptString(encryptedBuffer);
       } catch (error) {
@@ -212,8 +341,12 @@ class JournalApp {
       // Hash the provided password with the same salt
       const inputHash = crypto.pbkdf2Sync(password, config.salt, 100000, 64, 'sha512').toString('hex');
       
-      // Compare hashes
-      const isValid = inputHash === storedHash;
+      // Compare hashes in constant time.
+      const inputBuffer = Buffer.from(inputHash, 'utf8');
+      const storedBuffer = Buffer.from(storedHash, 'utf8');
+      const isValid =
+        inputBuffer.length === storedBuffer.length &&
+        crypto.timingSafeEqual(inputBuffer, storedBuffer);
       
       return { success: isValid, error: isValid ? undefined : 'Invalid password' };
     } catch (error) {
@@ -262,14 +395,14 @@ class JournalApp {
         ]
       });
 
-      if (result.canceled) {
+      if (result.canceled || !result.filePath) {
         return { success: false };
       }
 
       const entries = await this.db.getAllEntries();
       const markdown = this.generateMarkdownFromEntries(entries);
 
-      await fs.promises.writeFile(result.filePath!, markdown, 'utf8');
+      await fs.promises.writeFile(result.filePath, markdown, 'utf8');
       
       return { success: true, path: result.filePath };
     } catch (error) {

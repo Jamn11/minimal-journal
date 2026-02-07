@@ -178,6 +178,47 @@ describe('DatabaseManager', () => {
     expect(recentEntries[0].title).toBe('New Entry');
   });
 
+  test('should treat dateTo as inclusive end of day for date-only input', async () => {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const midday = new Date(startOfDay);
+    midday.setHours(12, 0, 0, 0);
+
+    const nextDay = new Date(startOfDay);
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(8, 0, 0, 0);
+
+    await db.saveEntry({
+      title: 'Today Entry',
+      body: 'Content',
+      draft: false,
+      timestamp: midday.toISOString()
+    });
+
+    await db.saveEntry({
+      title: 'Tomorrow Entry',
+      body: 'Content',
+      draft: false,
+      timestamp: nextDay.toISOString()
+    });
+
+    const results = await db.getAllEntries({
+      dateTo: startOfDay.toISOString().split('T')[0]
+    });
+
+    expect(results.some(entry => entry.title === 'Today Entry')).toBe(true);
+    expect(results.some(entry => entry.title === 'Tomorrow Entry')).toBe(false);
+  });
+
+  test('should allow apostrophes in search queries', async () => {
+    await db.saveEntry({ title: 'Reflection', body: "Today I'm grateful", draft: false });
+
+    const searchResults = await db.getAllEntries({ query: "I'm" });
+    expect(searchResults).toHaveLength(1);
+    expect(searchResults[0].title).toBe('Reflection');
+  });
+
   test('should delete entries', async () => {
     const entry = { title: 'To Delete', body: 'Content', draft: false };
     const savedEntry = await db.saveEntry(entry);

@@ -40,12 +40,12 @@ class SearchFilter {
       }
 
       if (this.currentFilters.dateFrom) {
-        if (entry.timestamp < this.currentFilters.dateFrom) return false;
+        const dateFrom = new Date(`${this.currentFilters.dateFrom}T00:00:00.000Z`);
+        if (entry.timestamp < dateFrom.toISOString()) return false;
       }
 
       if (this.currentFilters.dateTo) {
-        const dateTo = new Date(this.currentFilters.dateTo);
-        dateTo.setHours(23, 59, 59, 999);
+        const dateTo = new Date(`${this.currentFilters.dateTo}T23:59:59.999Z`);
         if (entry.timestamp > dateTo.toISOString()) return false;
       }
 

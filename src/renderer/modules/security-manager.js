@@ -6,6 +6,8 @@ class SecurityManager {
     this.failedPasswordAttempts = 0;
     this.lockoutEndTime = null;
     this.sessionTimeout = null;
+    this.sessionActivityListener = null;
+    this.sessionActivityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
   }
 
   // Password Protection Methods
@@ -133,6 +135,7 @@ class SecurityManager {
         this.uiManager.elements.confirmPassword.value = '';
         this.uiManager.elements.passwordSettings.style.display = 'none';
         this.uiManager.elements.changePasswordSection.style.display = 'block';
+        this.startSessionTimeout();
         
         this.uiManager.showFeedback('password-feedback', 'Passcode saved successfully!', 'success');
         setTimeout(() => this.uiManager.clearFeedback('password-feedback'), 3000);
@@ -261,12 +264,7 @@ class SecurityManager {
           this.uiManager.elements.passwordProtectionEnabled.checked = false;
           this.uiManager.elements.passwordSettings.style.display = 'none';
           this.uiManager.elements.changePasswordSection.style.display = 'none';
-          
-          // Clear session timeout when protection is disabled
-          if (this.sessionTimeout) {
-            clearTimeout(this.sessionTimeout);
-            this.sessionTimeout = null;
-          }
+          this.stopSessionTimeout();
           
           this.hideDisableProtectionModal();
           return true;
@@ -321,10 +319,26 @@ class SecurityManager {
     // Auto-lock after 30 minutes of inactivity
     this.resetSessionTimeout();
     
-    // Listen for user activity
-    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
-      document.addEventListener(event, () => this.resetSessionTimeout(), true);
-    });
+    if (!this.sessionActivityListener) {
+      this.sessionActivityListener = () => this.resetSessionTimeout();
+      this.sessionActivityEvents.forEach(event => {
+        document.addEventListener(event, this.sessionActivityListener, true);
+      });
+    }
+  }
+
+  stopSessionTimeout() {
+    if (this.sessionTimeout) {
+      clearTimeout(this.sessionTimeout);
+      this.sessionTimeout = null;
+    }
+
+    if (this.sessionActivityListener) {
+      this.sessionActivityEvents.forEach(event => {
+        document.removeEventListener(event, this.sessionActivityListener, true);
+      });
+      this.sessionActivityListener = null;
+    }
   }
 
   async resetSessionTimeout() {
@@ -344,6 +358,7 @@ class SecurityManager {
   async lockSession() {
     const isEnabled = await this.isPasswordProtectionEnabled();
     if (isEnabled) {
+      await this.showPasswordEntry();
       return { shouldShowPasswordEntry: true };
     }
     return { shouldShowPasswordEntry: false };

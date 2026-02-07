@@ -108,6 +108,17 @@ dll/
 test-results/
 playwright-report/
 
+# Local/internal docs and notes
+ISSUES.md
+.claude/
+claude.md
+memory.md
+review-report.md
+planning/
+debug-navigation.html
+test-navigation.js
+test-navigation-step-by-step.md
+
 # Database files (optional - uncomment if you don't want to track test databases)
 # *.db
 # *.sqlite

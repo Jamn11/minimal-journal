@@ -43,8 +43,6 @@ class JournalApp {
   }
 
   async init() {
-    console.log('Initializing JournalApp...');
-    
     try {
       // Check if electronAPI is available
       if (!window.electronAPI) {
@@ -87,7 +85,6 @@ class JournalApp {
         return;
       }
       
-      console.log('JournalApp initialized successfully');
     } catch (error) {
       console.error('Critical error during app initialization:', error);
       this.uiManager.showError('Critical error during initialization. Please restart the app.');
@@ -112,10 +109,14 @@ class JournalApp {
   }
 
   handleCriticalError(error) {
+    const safeError = error instanceof Error
+      ? error
+      : new Error(typeof error === 'string' ? error : 'Unknown error');
+
     // Log error details for debugging
     console.error('Critical error details:', {
-      message: error.message,
-      stack: error.stack,
+      message: safeError.message,
+      stack: safeError.stack,
       timestamp: new Date().toISOString(),
       currentScreen: this.appState.currentScreen
     });

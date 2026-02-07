@@ -1,14 +1,16 @@
 {
   "name": "minimal-journal",
+  "private": true,
   "version": "1.3.0",
   "description": "A minimalist journal app built with Electron",
   "main": "dist/main/main.js",
   "scripts": {
-    "build": "tsc && cp src/renderer/app-browser.js dist/renderer/ && cp src/renderer/index.html dist/renderer/ && cp src/renderer/styles.css dist/renderer/ && cp -r src/renderer/modules dist/renderer/",
+    "build": "tsc && node scripts/build-renderer.mjs",
     "start": "electron dist/main/main.js",
     "dev": "npm run build && electron dist/main/main.js",
     "test": "playwright test",
     "test:unit": "jest",
+    "setup:hooks": "sh scripts/setup-git-hooks.sh",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",

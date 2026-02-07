@@ -16,9 +16,7 @@ class EntryManager {
 
   async loadEntries() {
     try {
-      console.log('Loading entries...');
       this.entries = await window.electronAPI.getAllEntries();
-      console.log('Loaded entries:', this.entries.length);
       this.filteredEntries = [...this.entries];
       this.renderEntries();
     } catch (error) {
@@ -155,7 +153,6 @@ class EntryManager {
         }
       }
 
-      console.log('Saving entry:', entry);
       await window.electronAPI.saveEntry(entry);
       await this.loadEntries();
       
@@ -168,11 +165,12 @@ class EntryManager {
       return { success: true };
     } catch (error) {
       console.error('Failed to save entry:', error);
+      const errorMessage = error instanceof Error ? error.message : '';
       
       // Show user-friendly error messages
-      if (error.message.includes('cannot exceed')) {
-        this.uiManager.showError(error.message);
-      } else if (error.message.includes('invalid characters')) {
+      if (errorMessage.includes('cannot exceed')) {
+        this.uiManager.showError(errorMessage);
+      } else if (errorMessage.includes('invalid characters')) {
         this.uiManager.showError('Entry contains invalid characters. Please remove any special control characters.');
       } else {
         this.uiManager.showError('Failed to save entry. Please try again.');
@@ -217,18 +215,18 @@ class EntryManager {
         }
       }
 
-      console.log('Saving draft:', entry);
       await window.electronAPI.saveEntry(entry);
       await this.loadEntries();
       
       return { success: true, goHome: true };
     } catch (error) {
       console.error('Failed to save draft:', error);
+      const errorMessage = error instanceof Error ? error.message : '';
       
       // Show user-friendly error messages
-      if (error.message.includes('cannot exceed')) {
-        this.uiManager.showError(error.message);
-      } else if (error.message.includes('invalid characters')) {
+      if (errorMessage.includes('cannot exceed')) {
+        this.uiManager.showError(errorMessage);
+      } else if (errorMessage.includes('invalid characters')) {
         this.uiManager.showError('Entry contains invalid characters. Please remove any special control characters.');
       } else {
         this.uiManager.showError('Failed to save draft. Please try again.');
@@ -250,7 +248,6 @@ class EntryManager {
     }
 
     try {
-      console.log('Deleting entry:', this.appState.editingEntryId);
       await window.electronAPI.deleteEntry(this.appState.editingEntryId);
       await this.loadEntries();
       return true;

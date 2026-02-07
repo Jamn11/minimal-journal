@@ -63,12 +63,8 @@ class Utils {
     try {
       const result = await window.electronAPI.exportEntries();
       
-      if (result.success) {
-        console.log('Entries exported successfully to:', result.path);
-        // Could add a toast notification here
-      } else if (result.error) {
+      if (!result.success && result.error) {
         console.error('Export failed:', result.error);
-        // Could add error notification here
       }
     } catch (error) {
       console.error('Export failed:', error);

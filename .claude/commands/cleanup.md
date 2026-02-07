@@ -1,1 +1,0 @@
-Update all of the documentation in the file (especially the README), update your memory file, build the app as the next version (for MacOS), and make a commit to the git repo with a descriptive message of what has been changed and added. 
